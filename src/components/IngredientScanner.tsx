@@ -1,0 +1,370 @@
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  Modal, View, Text, TouchableOpacity, StyleSheet, SafeAreaView,
+  ScrollView, ActivityIndicator, Platform,
+} from 'react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import { extractIngredientsFromImage } from '../api/claudeVision';
+import { getIngredientFlag, countFlags } from '../utils/ingredientUtils';
+
+// Inline ingredient parser (same logic as productMapper, kept local to avoid circular deps)
+function parseIngredients(raw: string): string[] {
+  if (!raw || raw.length < 5) return [];
+  return raw
+    .replace(/\r?\n/g, ', ')
+    .replace(/\*+/g, '')
+    .replace(/\[[^\]]*\]/g, '')
+    .replace(/\([^)]*\)/g, '')
+    .replace(/\d+\.?\s(?=[A-Z])/g, '')
+    .split(/[,;]/)
+    .flatMap((s) => s.split('/').slice(0, 1))
+    .map((s) => {
+      const t = s.replace(/_/g, ' ').trim();
+      return t.charAt(0).toUpperCase() + t.slice(1);
+    })
+    .filter((s) => s.length >= 3 && s.length <= 70 && /[a-zA-Z]/.test(s))
+    .slice(0, 50);
+}
+
+type Screen = 'camera' | 'processing' | 'results' | 'error';
+
+interface Props {
+  visible: boolean;
+  onClose: () => void;
+}
+
+export default function IngredientScanner({ visible, onClose }: Props) {
+  const [screen, setScreen] = useState<Screen>('camera');
+  const [permission, requestPermission] = useCameraPermissions();
+  const [ingredients, setIngredients] = useState<string[]>([]);
+  const [errorMsg, setErrorMsg] = useState('');
+  const cameraRef = useRef<CameraView>(null);
+
+  useEffect(() => {
+    if (!visible) return;
+    setScreen('camera');
+  }, [visible]);
+
+  function handleClose() {
+    setScreen('camera');
+    setIngredients([]);
+    setErrorMsg('');
+    onClose();
+  }
+
+  async function handleCapture() {
+    if (!cameraRef.current) return;
+    setScreen('processing');
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.7 });
+      if (!photo?.base64) throw new Error('Failed to capture image');
+
+      const raw = await extractIngredientsFromImage(photo.base64);
+
+      if (raw === 'NO_INGREDIENTS') {
+        setErrorMsg("No ingredient list detected. Try getting closer and making sure the text is in focus.");
+        setScreen('error');
+        return;
+      }
+
+      const parsed = parseIngredients(raw);
+      if (parsed.length < 2) {
+        setErrorMsg("Couldn't parse enough ingredients. Try again with better lighting.");
+        setScreen('error');
+        return;
+      }
+
+      setIngredients(parsed);
+      setScreen('results');
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? 'Something went wrong. Please try again.');
+      setScreen('error');
+    }
+  }
+
+  if (Platform.OS === 'web') {
+    return (
+      <Modal visible={visible} animationType="slide" onRequestClose={handleClose}>
+        <SafeAreaView style={styles.center}>
+          <Text style={styles.unsupportedIcon}>📸</Text>
+          <Text style={styles.title}>Requires iOS or Android</Text>
+          <Text style={styles.subtitle}>Camera scanning isn't available in the web preview.</Text>
+          <TouchableOpacity style={styles.primaryBtn} onPress={handleClose}>
+            <Text style={styles.primaryBtnText}>Close</Text>
+          </TouchableOpacity>
+        </SafeAreaView>
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={handleClose}>
+      <SafeAreaView style={styles.container}>
+
+        {/* ── Camera ── */}
+        {screen === 'camera' && (
+          <>
+            {!permission?.granted ? (
+              <View style={styles.center}>
+                <Text style={styles.title}>Camera permission needed</Text>
+                <TouchableOpacity style={styles.primaryBtn} onPress={requestPermission}>
+                  <Text style={styles.primaryBtnText}>Allow Camera</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleClose} style={{ marginTop: 16 }}>
+                  <Text style={styles.cancelText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} />
+
+                {/* Dark overlay */}
+                <View style={styles.cameraOverlay} pointerEvents="none">
+                  <View style={styles.overlayTop} />
+                  <View style={styles.overlayRow}>
+                    <View style={styles.overlaySide} />
+                    <View style={styles.scanWindow}>
+                      <View style={[styles.corner, styles.cornerTL]} />
+                      <View style={[styles.corner, styles.cornerTR]} />
+                      <View style={[styles.corner, styles.cornerBL]} />
+                      <View style={[styles.corner, styles.cornerBR]} />
+                    </View>
+                    <View style={styles.overlaySide} />
+                  </View>
+                  <View style={styles.overlayBottom} />
+                </View>
+
+                {/* Header */}
+                <View style={styles.cameraHeader}>
+                  <TouchableOpacity style={styles.closeIconBtn} onPress={handleClose}>
+                    <Text style={styles.closeIcon}>✕</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.cameraTitle}>Scan Ingredients</Text>
+                </View>
+
+                {/* Hint + capture */}
+                <View style={styles.cameraFooter}>
+                  <Text style={styles.cameraHint}>
+                    Point at the ingredient list on the back of the product
+                  </Text>
+                  <TouchableOpacity style={styles.captureBtn} onPress={handleCapture}>
+                    <View style={styles.captureInner} />
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </>
+        )}
+
+        {/* ── Processing ── */}
+        {screen === 'processing' && (
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color="#C8A2C8" />
+            <Text style={styles.title}>Reading ingredients…</Text>
+            <Text style={styles.subtitle}>Claude is analysing your photo</Text>
+          </View>
+        )}
+
+        {/* ── Error ── */}
+        {screen === 'error' && (
+          <View style={styles.center}>
+            <Text style={styles.bigIcon}>😕</Text>
+            <Text style={styles.title}>Couldn't read ingredients</Text>
+            <Text style={styles.subtitle}>{errorMsg}</Text>
+            <TouchableOpacity style={styles.primaryBtn} onPress={() => setScreen('camera')}>
+              <Text style={styles.primaryBtnText}>Try Again</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleClose} style={{ marginTop: 16 }}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ── Results ── */}
+        {screen === 'results' && (
+          <View style={{ flex: 1 }}>
+            <View style={styles.resultsHeader}>
+              <View>
+                <Text style={styles.title}>Ingredient Analysis</Text>
+                <Text style={styles.subtitle}>{ingredients.length} ingredients detected</Text>
+              </View>
+              <TouchableOpacity style={styles.closeIconBtn} onPress={handleClose}>
+                <Text style={styles.closeIcon}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ResultsSummary ingredients={ingredients} />
+
+            <ScrollView contentContainerStyle={styles.resultsList}>
+              {ingredients.map((ing, i) => {
+                const flag = getIngredientFlag(ing);
+                return (
+                  <View
+                    key={i}
+                    style={[styles.ingredientRow, i < ingredients.length - 1 && styles.ingredientBorder]}
+                  >
+                    <View style={styles.ingLeft}>
+                      <Text style={styles.ingName}>{ing}</Text>
+                      {flag?.commonInteractions[0] && (
+                        <Text style={styles.ingNote}>{flag.commonInteractions[0]}</Text>
+                      )}
+                    </View>
+                    <View style={styles.flags}>
+                      {flag?.isComedogenic && (
+                        <View style={[styles.flag, styles.flagRed]}>
+                          <Text style={styles.flagText}>Pore-clogging</Text>
+                        </View>
+                      )}
+                      {flag?.isIrritant && (
+                        <View style={[styles.flag, styles.flagOrange]}>
+                          <Text style={styles.flagText}>Irritant</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                );
+              })}
+
+              <TouchableOpacity
+                style={styles.scanAgainBtn}
+                onPress={() => { setIngredients([]); setScreen('camera'); }}
+              >
+                <Text style={styles.scanAgainText}>📸 Scan another product</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        )}
+
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+function ResultsSummary({ ingredients }: { ingredients: string[] }) {
+  const { comedogenic, irritant } = countFlags(ingredients);
+  const clean = ingredients.length - comedogenic - irritant;
+  return (
+    <View style={styles.summaryRow}>
+      <View style={styles.summaryCard}>
+        <Text style={styles.summaryNum}>{ingredients.length}</Text>
+        <Text style={styles.summaryLabel}>Total</Text>
+      </View>
+      <View style={[styles.summaryCard, comedogenic > 0 && styles.summaryRed]}>
+        <Text style={[styles.summaryNum, comedogenic > 0 && { color: '#C0392B' }]}>{comedogenic}</Text>
+        <Text style={[styles.summaryLabel, comedogenic > 0 && { color: '#C0392B' }]}>Pore-clogging</Text>
+      </View>
+      <View style={[styles.summaryCard, irritant > 0 && styles.summaryOrange]}>
+        <Text style={[styles.summaryNum, irritant > 0 && { color: '#CA6F1E' }]}>{irritant}</Text>
+        <Text style={[styles.summaryLabel, irritant > 0 && { color: '#CA6F1E' }]}>Irritants</Text>
+      </View>
+      <View style={[styles.summaryCard, styles.summaryGreen]}>
+        <Text style={[styles.summaryNum, { color: '#1E8449' }]}>{clean}</Text>
+        <Text style={[styles.summaryLabel, { color: '#1E8449' }]}>Clean</Text>
+      </View>
+    </View>
+  );
+}
+
+const CORNER = 22;
+const CORNER_W = 3;
+const SCAN_H = 200;
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#FAFAF8' },
+  center: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    padding: 32, gap: 14, backgroundColor: '#FAFAF8',
+  },
+
+  bigIcon: { fontSize: 52 },
+  title: { fontSize: 20, fontWeight: '800', color: '#1A1A2E', textAlign: 'center' },
+  subtitle: { fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 20 },
+  cancelText: { fontSize: 14, color: '#AAA' },
+  errorText: { fontSize: 13, color: '#C0392B', textAlign: 'center' },
+
+  primaryBtn: {
+    backgroundColor: '#C8A2C8', borderRadius: 14,
+    paddingHorizontal: 28, paddingVertical: 14, width: '100%', alignItems: 'center',
+  },
+  primaryBtnDisabled: { opacity: 0.4 },
+  primaryBtnText: { color: '#FFF', fontWeight: '700', fontSize: 15 },
+
+  // Camera
+  cameraOverlay: { ...StyleSheet.absoluteFill },
+  overlayTop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
+  overlayRow: { flexDirection: 'row', height: SCAN_H },
+  overlaySide: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
+  overlayBottom: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
+  scanWindow: { width: 300, height: SCAN_H },
+  corner: { position: 'absolute', width: CORNER, height: CORNER, borderColor: '#C8A2C8' },
+  cornerTL: { top: 0, left: 0, borderTopWidth: CORNER_W, borderLeftWidth: CORNER_W },
+  cornerTR: { top: 0, right: 0, borderTopWidth: CORNER_W, borderRightWidth: CORNER_W },
+  cornerBL: { bottom: 0, left: 0, borderBottomWidth: CORNER_W, borderLeftWidth: CORNER_W },
+  cornerBR: { bottom: 0, right: 0, borderBottomWidth: CORNER_W, borderRightWidth: CORNER_W },
+
+  cameraHeader: {
+    position: 'absolute', top: 0, left: 0, right: 0,
+    paddingTop: 56, paddingHorizontal: 20, paddingBottom: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+  },
+  closeIconBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center',
+  },
+  closeIcon: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  cameraTitle: { fontSize: 18, fontWeight: '700', color: '#FFF' },
+
+  cameraFooter: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    alignItems: 'center', paddingBottom: 50, gap: 24,
+  },
+  cameraHint: { color: 'rgba(255,255,255,0.8)', fontSize: 13, textAlign: 'center', paddingHorizontal: 40 },
+  captureBtn: {
+    width: 72, height: 72, borderRadius: 36,
+    borderWidth: 4, borderColor: '#FFF',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  captureInner: {
+    width: 56, height: 56, borderRadius: 28, backgroundColor: '#FFF',
+  },
+
+  // Results
+  resultsHeader: {
+    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
+    padding: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F0F0F0',
+  },
+
+  summaryRow: { flexDirection: 'row', gap: 8, padding: 16, paddingBottom: 8 },
+  summaryCard: {
+    flex: 1, backgroundColor: '#FFF', borderRadius: 12, padding: 10,
+    alignItems: 'center', gap: 2,
+    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+  },
+  summaryRed: { backgroundColor: '#FFF5F5' },
+  summaryOrange: { backgroundColor: '#FFF8EE' },
+  summaryGreen: { backgroundColor: '#F0FBF4' },
+  summaryNum: { fontSize: 20, fontWeight: '800', color: '#1A1A2E' },
+  summaryLabel: { fontSize: 9, fontWeight: '600', color: '#888', textAlign: 'center' },
+
+  resultsList: { padding: 16, paddingTop: 8, paddingBottom: 40 },
+  ingredientRow: {
+    paddingVertical: 12, flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+  },
+  ingredientBorder: { borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
+  ingLeft: { flex: 1 },
+  ingName: { fontSize: 14, color: '#1A1A2E', fontWeight: '500' },
+  ingNote: { fontSize: 11, color: '#AAA', marginTop: 2, lineHeight: 15 },
+  flags: { flexDirection: 'row', gap: 6, flexShrink: 0 },
+  flag: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  flagRed: { backgroundColor: '#FFE0E0' },
+  flagOrange: { backgroundColor: '#FFF0D0' },
+  flagText: { fontSize: 10, fontWeight: '700', color: '#555' },
+
+  unsupportedIcon: { fontSize: 52 },
+
+  scanAgainBtn: {
+    marginTop: 24, backgroundColor: '#F0E6FF', borderRadius: 14,
+    paddingVertical: 14, alignItems: 'center',
+  },
+  scanAgainText: { fontSize: 14, fontWeight: '700', color: '#9B59B6' },
+});
