@@ -86,7 +86,7 @@ SkinMatch is a **confidence tool**, not an information tool.
 - Community features, reviews, social anything
 
 **Tech debt that blocks launch:**
-- [x] Move Claude Vision calls behind a Firebase Cloud Function (never ship an API key in the bundle) — code done (`functions/src/index.ts`), still needs the function deployed and the `ANTHROPIC_API_KEY` secret set on an actual Firebase project
+- [x] Move Claude Vision calls behind a Firebase Cloud Function (never ship an API key in the bundle) — deployed and live at `functions/src/index.ts` on project `skinmatch-fc26e`, `ANTHROPIC_API_KEY` secret set, end-to-end tested with a real request (200 response)
 - [x] Routine tab empty-state / cold-start flow
 - [x] Dupe score explanation UI
 
