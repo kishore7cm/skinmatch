@@ -86,7 +86,7 @@ SkinMatch is a **confidence tool**, not an information tool.
 - Community features, reviews, social anything
 
 **Tech debt that blocks launch:**
-- [x] Move Claude Vision calls behind a Supabase Edge Function (never ship an API key in the bundle) — code done (`supabase/functions/extract-ingredients/`), still needs the function deployed and secrets set on an actual Supabase project
+- [x] Move Claude Vision calls behind a Firebase Cloud Function (never ship an API key in the bundle) — code done (`functions/src/index.ts`), still needs the function deployed and the `ANTHROPIC_API_KEY` secret set on an actual Firebase project
 - [x] Routine tab empty-state / cold-start flow
 - [x] Dupe score explanation UI
 
