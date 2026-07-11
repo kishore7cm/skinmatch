@@ -204,42 +204,34 @@ export default function IngredientsScreen() {
         initialBarcode={submissionBarcode}
       />
 
-      {/* Category filter + sort — hidden in API mode */}
+      {/* Category filter — hidden in API mode */}
       {!isApiMode && (
-        <>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.chipsScroll}
-            contentContainerStyle={styles.chips}
-          >
-            {CATEGORIES.map((cat) => {
-              const isActive = category === cat;
-              const meta = cat !== 'all' ? CATEGORY_META[cat] : null;
-              return (
-                <TouchableOpacity
-                  key={cat}
-                  style={[styles.chip, isActive && (meta ? { backgroundColor: meta.bg, borderColor: meta.color } : styles.chipActiveDefault)]}
-                  onPress={() => setCategory(cat)}
-                >
-                  {meta && <Ionicons name={meta.icon} size={13} color={isActive ? meta.color : colors.inkSoft} style={styles.chipIcon} />}
-                  <Text style={[styles.chipText, isActive && (meta ? { color: meta.color } : styles.chipTextActiveDefault)]}>
-                    {cat === 'all' ? 'All' : cat.charAt(0).toUpperCase() + cat.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-
-          <View style={styles.sortRow}>
-            <TouchableOpacity style={styles.sortBtn} onPress={cycleSort}>
-              <Text style={styles.sortBtnText}>{SORT_LABELS[sortMode]}</Text>
-            </TouchableOpacity>
-          </View>
-        </>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.chipsScroll}
+          contentContainerStyle={styles.chips}
+        >
+          {CATEGORIES.map((cat) => {
+            const isActive = category === cat;
+            const meta = cat !== 'all' ? CATEGORY_META[cat] : null;
+            return (
+              <TouchableOpacity
+                key={cat}
+                style={[styles.chip, isActive && (meta ? { backgroundColor: meta.bg, borderColor: meta.color } : styles.chipActiveDefault)]}
+                onPress={() => setCategory(cat)}
+              >
+                {meta && <Ionicons name={meta.icon} size={13} color={isActive ? meta.color : colors.inkSoft} style={styles.chipIcon} />}
+                <Text style={[styles.chipText, isActive && (meta ? { color: meta.color } : styles.chipTextActiveDefault)]}>
+                  {cat === 'all' ? 'All' : cat.charAt(0).toUpperCase() + cat.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       )}
 
-      {/* Results count / status */}
+      {/* Results count / status, with sort control sharing the same row */}
       {isApiMode ? (
         <View style={styles.apiStatusRow}>
           {isLoading ? (
@@ -253,9 +245,15 @@ export default function IngredientsScreen() {
           )}
         </View>
       ) : (
-        <Text style={styles.resultsCount}>
-          {displayProducts.length} product{displayProducts.length !== 1 ? 's' : ''}
-        </Text>
+        <View style={styles.resultsRow}>
+          <Text style={styles.resultsCount}>
+            {displayProducts.length} product{displayProducts.length !== 1 ? 's' : ''}
+          </Text>
+          <TouchableOpacity style={styles.sortBtn} onPress={cycleSort}>
+            <Ionicons name="swap-vertical" size={12} color={colors.inkSoft} />
+            <Text style={styles.sortBtnText}>{SORT_LABELS[sortMode]}</Text>
+          </TouchableOpacity>
+        </View>
       )}
 
       <FlatList
@@ -386,14 +384,18 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 12, fontWeight: '600', color: colors.inkSoft },
   chipTextActiveDefault: { color: colors.sage },
 
-  sortRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, marginBottom: 8 },
-  sortBtn: {
-    paddingHorizontal: 12, paddingVertical: 7,
-    borderRadius: 20, backgroundColor: colors.ink,
+  resultsRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, marginBottom: 8,
   },
-  sortBtnText: { fontSize: 11, fontWeight: '700', color: colors.surface },
+  sortBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: 20, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface,
+  },
+  sortBtnText: { fontSize: 11, fontWeight: '700', color: colors.inkSoft },
 
   apiStatusRow: { paddingHorizontal: 16, marginBottom: 8 },
-  resultsCount: { fontSize: 12, color: colors.inkSoft, paddingHorizontal: 16, marginBottom: 8, fontWeight: '600' },
+  resultsCount: { fontSize: 12, color: colors.inkSoft, fontWeight: '600' },
   list: { paddingHorizontal: 16, paddingBottom: 30, gap: 10 },
 });
