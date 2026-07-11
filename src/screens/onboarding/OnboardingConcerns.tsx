@@ -1,12 +1,18 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
+import { OnboardingStackParamList } from '../../types/navigation';
 import { saveProfile } from '../../utils/profileStorage';
-import { useOnboardingComplete } from '../../context/OnboardingContext';
 import { CONCERNS } from '../../data/concerns';
+import { colors, typography, cardStyle } from '../../theme';
+
+type Nav = NativeStackNavigationProp<OnboardingStackParamList, 'Concerns'>;
 
 export default function OnboardingConcerns() {
   const [selected, setSelected] = useState<string[]>([]);
-  const onComplete = useOnboardingComplete();
+  const navigation = useNavigation<Nav>();
 
   function toggle(id: string) {
     setSelected((prev) =>
@@ -14,9 +20,9 @@ export default function OnboardingConcerns() {
     );
   }
 
-  async function handleFinish() {
-    await saveProfile({ concerns: selected, onboarded: true });
-    onComplete();
+  async function handleContinue() {
+    await saveProfile({ concerns: selected });
+    navigation.navigate('Preferences');
   }
 
   return (
@@ -27,6 +33,7 @@ export default function OnboardingConcerns() {
         <View style={styles.progress}>
           <View style={[styles.dot, styles.dotDone]} />
           <View style={[styles.dot, styles.dotActive]} />
+          <View style={styles.dot} />
         </View>
 
         <Text style={styles.heading}>Any skin concerns?</Text>
@@ -45,10 +52,10 @@ export default function OnboardingConcerns() {
                 activeOpacity={0.75}
               >
                 <View style={styles.cardTop}>
-                  <Text style={styles.cardIcon}>{c.icon}</Text>
+                  <Ionicons name={c.icon} size={24} color={active ? colors.sage : colors.ink} style={styles.cardIcon} />
                   {active && (
                     <View style={styles.checkmark}>
-                      <Text style={styles.checkmarkText}>✓</Text>
+                      <Ionicons name="checkmark" size={12} color={colors.surface} />
                     </View>
                   )}
                 </View>
@@ -68,10 +75,8 @@ export default function OnboardingConcerns() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.btn} onPress={handleFinish} activeOpacity={0.85}>
-          <Text style={styles.btnText}>
-            {selected.length === 0 ? 'Skip for Now  →' : `Finish Setup  →`}
-          </Text>
+        <TouchableOpacity style={styles.btn} onPress={handleContinue} activeOpacity={0.85}>
+          <Text style={styles.btnText}>Continue  →</Text>
         </TouchableOpacity>
         {selected.length === 0 && (
           <Text style={styles.skipNote}>You can add concerns later from the Routine tab.</Text>
@@ -82,43 +87,39 @@ export default function OnboardingConcerns() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAFAF8' },
+  container: { flex: 1, backgroundColor: colors.paper },
   content: { padding: 24, paddingBottom: 8 },
 
   progress: { flexDirection: 'row', gap: 6, marginBottom: 28 },
-  dot: { height: 4, width: 16, borderRadius: 2, backgroundColor: '#E5E5E5' },
-  dotDone: { width: 16, backgroundColor: '#C8A2C8' },
-  dotActive: { width: 32, backgroundColor: '#C8A2C8' },
+  dot: { height: 4, width: 16, borderRadius: 2, backgroundColor: colors.line },
+  dotDone: { width: 16, backgroundColor: colors.sage },
+  dotActive: { width: 32, backgroundColor: colors.sage },
 
-  heading: { fontSize: 28, fontWeight: '800', color: '#1A1A2E', letterSpacing: -0.5, marginBottom: 8 },
-  subheading: { fontSize: 14, color: '#AAA', marginBottom: 28, lineHeight: 20 },
+  heading: { ...typography.screenTitle, fontSize: 28, color: colors.ink, marginBottom: 8 },
+  subheading: { ...typography.body, fontSize: 14, color: colors.inkSoft, marginBottom: 28, lineHeight: 20 },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   card: {
-    width: '47%', backgroundColor: '#FFF', borderRadius: 18,
-    padding: 14, borderWidth: 2, borderColor: '#EBEBEB', gap: 4,
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, elevation: 1,
+    width: '47%', ...cardStyle, padding: 14, gap: 4,
   },
-  cardActive: { borderColor: '#C8A2C8', backgroundColor: '#FCF5FC' },
+  cardActive: { borderColor: colors.sage, backgroundColor: colors.sageSoft },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  cardIcon: { fontSize: 26, marginBottom: 6 },
+  cardIcon: { marginBottom: 6 },
   checkmark: {
     width: 20, height: 20, borderRadius: 10,
-    backgroundColor: '#C8A2C8', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.sage, alignItems: 'center', justifyContent: 'center',
   },
-  checkmarkText: { fontSize: 11, color: '#FFF', fontWeight: '800' },
-  cardLabel: { fontSize: 13, fontWeight: '700', color: '#1A1A2E', lineHeight: 17 },
-  cardLabelActive: { color: '#9B59B6' },
-  cardDesc: { fontSize: 11, color: '#AAA', lineHeight: 16, marginTop: 2 },
+  cardLabel: { fontSize: 13, fontWeight: '700', color: colors.ink, lineHeight: 17 },
+  cardLabelActive: { color: colors.sage },
+  cardDesc: { fontSize: 11, color: colors.inkSoft, lineHeight: 16, marginTop: 2 },
 
-  selectionCount: { fontSize: 13, color: '#C8A2C8', fontWeight: '700', textAlign: 'center', marginTop: 16 },
+  selectionCount: { fontSize: 13, color: colors.sage, fontWeight: '700', textAlign: 'center', marginTop: 16 },
 
   footer: { padding: 24, paddingTop: 12, gap: 8 },
   btn: {
-    backgroundColor: '#C8A2C8', borderRadius: 16, paddingVertical: 17,
+    backgroundColor: colors.sage, borderRadius: 16, paddingVertical: 17,
     alignItems: 'center',
-    shadowColor: '#C8A2C8', shadowOpacity: 0.35, shadowRadius: 10, elevation: 3,
   },
-  btnText: { fontSize: 17, fontWeight: '800', color: '#FFF' },
-  skipNote: { fontSize: 12, color: '#CCC', textAlign: 'center' },
+  btnText: { fontSize: 17, fontWeight: '800', color: colors.surface },
+  skipNote: { fontSize: 12, color: colors.inkSoft, textAlign: 'center' },
 });

@@ -12,40 +12,54 @@ import { getProfile, saveProfile } from '../utils/profileStorage';
 import { PRODUCTS } from '../data/products';
 import { getShelf, getShelfProduct } from '../utils/shelfStorage';
 import { getCachedProduct } from '../utils/productCache';
-import { getAssignments, setAssignment, removeAssignment } from '../utils/routineAssignments';
-import { CATEGORY_META } from '../components/ProductCard';
+import { getAssignments, setAssignment, removeAssignment, Assignment, AssignmentSource } from '../utils/routineAssignments';
+import { checkConcernCoverage, checkSkinTypeCautions } from '../utils/routineFit';
+import { routineMonthlyCost, RoutineCostLine, RoutineCostSummary } from '../utils/routineCost';
+import { recommendForStep, RecommendationPreferences, scorePreferenceFit, categoryMedianPrice } from '../utils/routineRecommendations';
+import { findDupes, dupeExplanation } from '../utils/matching';
+import { PER_USE_ML, estimatedUses } from '../data/usageDefaults';
+import { Ionicons } from '@expo/vector-icons';
+import { CATEGORY_META, IoniconName } from '../components/ProductCard';
 import ProductPickerModal from '../components/ProductPickerModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { colors, typography, fontFamilies, cardStyle, scoreColor, scoreBgColor, borders } from '../theme';
+import { useToast } from '../context/ToastContext';
+import PressableScale from '../components/PressableScale';
 
 const BANNER_KEY = 'skinmatch_setup_banner_dismissed';
 
 type Nav = NativeStackNavigationProp<AppStackParamList>;
 
-const SKIN_TYPES: { type: SkinType; icon: string; label: string; description: string }[] = [
-  { type: 'oily',        icon: '💧', label: 'Oily',        description: 'Shiny, enlarged pores, breakout-prone' },
-  { type: 'dry',         icon: '🌵', label: 'Dry',         description: 'Tight, flaky, rough or dull' },
-  { type: 'combination', icon: '☯️', label: 'Combination', description: 'Oily T-zone, dry cheeks' },
-  { type: 'sensitive',   icon: '🌸', label: 'Sensitive',   description: 'Reactive, redness or stinging' },
-  { type: 'normal',      icon: '✨', label: 'Normal',      description: 'Balanced, minimal concerns' },
+const SKIN_TYPES: { type: SkinType; icon: IoniconName; label: string; description: string }[] = [
+  { type: 'oily',        icon: 'water',          label: 'Oily',        description: 'Shiny, enlarged pores, breakout-prone' },
+  { type: 'dry',         icon: 'snow-outline',   label: 'Dry',         description: 'Tight, flaky, rough or dull' },
+  { type: 'combination', icon: 'contrast-outline', label: 'Combination', description: 'Oily T-zone, dry cheeks' },
+  { type: 'sensitive',   icon: 'flower-outline', label: 'Sensitive',   description: 'Reactive, redness or stinging' },
+  { type: 'normal',      icon: 'sparkles',       label: 'Normal',      description: 'Balanced, minimal concerns' },
 ];
 
-const STEP_META: Record<string, { color: string; icon: string }> = {
-  cleanse:    { color: '#D6EAF8', icon: '🫧' },
-  tone:       { color: '#E8DAEF', icon: '💧' },
-  treat:      { color: '#FDEBD0', icon: '✨' },
-  moisturize: { color: '#D5F5E3', icon: '🧴' },
-  protect:    { color: '#FDEBD0', icon: '☀️' },
+// Step type is now differentiated by icon + label only, not a per-category
+// pastel background — one consistent card treatment across every step.
+const STEP_META: Record<string, { icon: IoniconName }> = {
+  cleanse:    { icon: 'water-outline' },
+  tone:       { icon: 'leaf-outline' },
+  treat:      { icon: 'sparkles' },
+  moisturize: { icon: 'cube-outline' },
+  protect:    { icon: 'sunny-outline' },
 };
 
 export default function RoutineScreen() {
   const [skinType, setSkinType] = useState<SkinType | null>(null);
   const [concerns, setConcerns] = useState<string[]>([]);
+  const [preferences, setPreferences] = useState<RecommendationPreferences>({});
   const [loaded, setLoaded] = useState(false);
-  const [assignments, setAssignments] = useState<Record<string, string>>({});
+  const [assignments, setAssignments] = useState<Record<string, Assignment>>({});
   const [shelfProducts, setShelfProducts] = useState<Product[]>([]);
   const [pickerStep, setPickerStep] = useState<string | null>(null);
+  const [altStep, setAltStep] = useState<string | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(true);
   const navigation = useNavigation<Nav>();
+  const { showToast } = useToast();
 
   useFocusEffect(
     useCallback(() => {
@@ -58,6 +72,11 @@ export default function RoutineScreen() {
         ]);
         setSkinType(profile.skinType);
         setConcerns(profile.concerns);
+        setPreferences({
+          budgetPreference: profile.budgetPreference,
+          intensityPreference: profile.intensityPreference,
+          cleanPreference: profile.cleanPreference,
+        });
         setAssignments(saved);
 
         const resolved = await Promise.all(
@@ -85,10 +104,12 @@ export default function RoutineScreen() {
     await saveProfile({ skinType: type });
   }
 
-  async function handleAssign(stepType: string, product: Product) {
-    await setAssignment(stepType, product.id);
-    setAssignments((prev) => ({ ...prev, [stepType]: product.id }));
+  async function handleAssign(stepType: string, product: Product, source: AssignmentSource) {
+    const wasAssigned = !!assignments[stepType];
+    await setAssignment(stepType, product.id, source);
+    setAssignments((prev) => ({ ...prev, [stepType]: { productId: product.id, source } }));
     setPickerStep(null);
+    showToast(wasAssigned ? 'Swap applied' : 'Added to your routine');
   }
 
   async function handleUnassign(stepType: string) {
@@ -112,6 +133,27 @@ export default function RoutineScreen() {
   const activeConcerns = CONCERNS.filter((c) => concerns.includes(c.id));
   const pickerStepLabel = pickerStep ? (STEP_TYPE_LABELS[pickerStep] ?? pickerStep) : '';
 
+  const assignedList = Object.entries(assignments)
+    .map(([stepType, assignment]) => ({ stepType, product: resolveAssignedProduct(assignment.productId) }))
+    .filter((a): a is { stepType: string; product: Product } => !!a.product);
+
+  const concernCoverage = activeConcerns.length > 0
+    ? checkConcernCoverage(activeConcerns, assignedList.map((a) => a.product))
+    : [];
+  const cautions = skinType ? checkSkinTypeCautions(skinType, assignedList) : [];
+  const showFitSection = assignedList.length > 0 && (concernCoverage.length > 0 || cautions.length > 0);
+
+  const costSummary = routine
+    ? routineMonthlyCost(
+        routine.map((step) => ({
+          stepType: step.stepType,
+          product: assignments[step.stepType] ? resolveAssignedProduct(assignments[step.stepType].productId) : undefined,
+          timesPerDay: step.timesPerDay,
+        })),
+      )
+    : null;
+  const showCostCard = !!costSummary && costSummary.breakdown.some((l) => l.product);
+
   if (!loaded) return null;
 
   return (
@@ -121,7 +163,10 @@ export default function RoutineScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.brandLogo}>✨ SkinMatch</Text>
+            <View style={styles.brandRow}>
+              <Ionicons name="sparkles" size={18} color={colors.sage} />
+              <Text style={styles.brandLogo}>SkinMatch</Text>
+            </View>
             <Text style={styles.brandSub}>
               {skinType
                 ? `${skinType.charAt(0).toUpperCase() + skinType.slice(1)} skin${activeConcerns.length > 0 ? ` · ${activeConcerns.map(c => c.label).slice(0, 2).join(' · ')}${activeConcerns.length > 2 ? ` +${activeConcerns.length - 2}` : ''}` : ''}`
@@ -137,9 +182,9 @@ export default function RoutineScreen() {
         {skinType && (
           <View style={styles.profileCard}>
             <View style={styles.profileLeft}>
-              <Text style={styles.profileIcon}>
-                {SKIN_TYPES.find((s) => s.type === skinType)?.icon}
-              </Text>
+              <View style={styles.profileIconBox}>
+                <Ionicons name={SKIN_TYPES.find((s) => s.type === skinType)?.icon ?? 'water'} size={26} color={colors.sage} />
+              </View>
               <View>
                 <Text style={styles.profileSkinType}>
                   {skinType.charAt(0).toUpperCase() + skinType.slice(1)} skin
@@ -148,7 +193,8 @@ export default function RoutineScreen() {
                   <View style={styles.concernChips}>
                     {activeConcerns.slice(0, 3).map((c) => (
                       <View key={c.id} style={styles.concernChip}>
-                        <Text style={styles.concernChipText}>{c.icon} {c.label}</Text>
+                        <Ionicons name={c.icon} size={11} color={colors.sage} />
+                        <Text style={styles.concernChipText}>{c.label}</Text>
                       </View>
                     ))}
                     {activeConcerns.length > 3 && (
@@ -167,19 +213,34 @@ export default function RoutineScreen() {
           </View>
         )}
 
+        {/* Routine Cost */}
+        {showCostCard && <RoutineCostCard summary={costSummary!} />}
+
         {/* Setup banner — shown until dismissed or shelf has products */}
         {skinType && !bannerDismissed && shelfProducts.length === 0 && (
           <View style={styles.banner}>
             <View style={styles.bannerTop}>
-              <Text style={styles.bannerTitle}>👋 Set up your routine</Text>
+              <View style={styles.bannerTitleRow}>
+                <Ionicons name="flag-outline" size={16} color={colors.ink} />
+                <Text style={styles.bannerTitle}>Set up your routine</Text>
+              </View>
               <TouchableOpacity onPress={handleDismissBanner} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={styles.bannerClose}>✕</Text>
+                <Ionicons name="close" size={16} color={colors.inkSoft} />
               </TouchableOpacity>
             </View>
             <View style={styles.bannerSteps}>
-              <Text style={styles.bannerStep}>🔍  Search or scan your products in <Text style={styles.bannerTabName}>Ingredients</Text></Text>
-              <Text style={styles.bannerStep}>🔖  Tap the bookmark to save them to My Shelf</Text>
-              <Text style={styles.bannerStep}>✅  Come back here and assign them to each step</Text>
+              <View style={styles.bannerStepRow}>
+                <Ionicons name="search-outline" size={16} color={colors.sage} />
+                <Text style={styles.bannerStep}>Search or scan your products in <Text style={styles.bannerTabName}>Products</Text></Text>
+              </View>
+              <View style={styles.bannerStepRow}>
+                <Ionicons name="bookmark-outline" size={16} color={colors.sage} />
+                <Text style={styles.bannerStep}>Tap the bookmark to save them to My Shelf</Text>
+              </View>
+              <View style={styles.bannerStepRow}>
+                <Ionicons name="checkmark-circle-outline" size={16} color={colors.sage} />
+                <Text style={styles.bannerStep}>Come back here and assign them to each step</Text>
+              </View>
             </View>
             <TouchableOpacity
               style={styles.bannerBtn}
@@ -188,7 +249,7 @@ export default function RoutineScreen() {
                 navigation.getParent()?.navigate('Ingredients' as never);
               }}
             >
-              <Text style={styles.bannerBtnText}>Go to Ingredients →</Text>
+              <Text style={styles.bannerBtnText}>Go to Products →</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -205,7 +266,7 @@ export default function RoutineScreen() {
                   onPress={() => handleSelectSkinType(type)}
                   activeOpacity={0.75}
                 >
-                  <Text style={styles.skinIcon}>{icon}</Text>
+                  <Ionicons name={icon} size={22} color={skinType === type ? colors.sage : colors.ink} />
                   <Text style={[styles.skinLabel, skinType === type && styles.skinLabelActive]}>{label}</Text>
                   <Text style={styles.skinDesc} numberOfLines={2}>{description}</Text>
                 </TouchableOpacity>
@@ -222,18 +283,19 @@ export default function RoutineScreen() {
             </Text>
             <View style={styles.steps}>
               {routine.map((step, i) => {
-                const meta = STEP_META[step.stepType] ?? { color: '#F0F0F0', icon: '•' };
-                const assignedId = assignments[step.stepType];
-                const assignedProduct = assignedId ? resolveAssignedProduct(assignedId) : undefined;
+                const meta = STEP_META[step.stepType] ?? { icon: 'ellipse-outline' as IoniconName };
+                const assignment = assignments[step.stepType];
+                const assignedProduct = assignment ? resolveAssignedProduct(assignment.productId) : undefined;
+                const isManual = assignedProduct && assignment?.source === 'manual';
                 const catMeta = assignedProduct
-                  ? (CATEGORY_META[assignedProduct.category] ?? { icon: '📦', bg: '#F5F5F5', color: '#666' })
+                  ? (CATEGORY_META[assignedProduct.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.sageSoft, color: colors.sage })
                   : null;
 
                 return (
-                  <View key={step.order} style={[styles.stepCard, { backgroundColor: meta.color }]}>
+                  <View key={step.order} style={[styles.stepCard, isManual && styles.stepCardManual]}>
                     {/* Step header */}
                     <View style={styles.stepHeader}>
-                      <Text style={styles.stepIcon}>{meta.icon}</Text>
+                      <Ionicons name={meta.icon} size={18} color={colors.inkSoft} />
                       <Text style={styles.stepLabel}>{STEP_TYPE_LABELS[step.stepType]}</Text>
                       <View style={styles.stepNum}>
                         <Text style={styles.stepNumText}>{i + 1}</Text>
@@ -242,51 +304,140 @@ export default function RoutineScreen() {
 
                     {/* Assigned product */}
                     {assignedProduct ? (
-                      <TouchableOpacity
-                        style={styles.assignedCard}
-                        onPress={() => navigation.navigate('ProductDetail', { productId: assignedProduct.id })}
-                        activeOpacity={0.8}
-                      >
-                        {assignedProduct.imageUrl ? (
-                          <Image
-                            source={{ uri: assignedProduct.imageUrl }}
-                            style={[styles.assignedImg, { backgroundColor: catMeta!.bg }]}
-                            resizeMode="contain"
-                          />
-                        ) : (
-                          <View style={[styles.assignedImg, { backgroundColor: catMeta!.bg }]}>
-                            <Text style={{ fontSize: 20 }}>{catMeta!.icon}</Text>
-                          </View>
-                        )}
-                        <View style={styles.assignedInfo}>
-                          <Text style={styles.assignedName} numberOfLines={1}>{assignedProduct.name}</Text>
-                          <Text style={styles.assignedBrand}>{assignedProduct.brand}</Text>
-                        </View>
-                        <TouchableOpacity
-                          style={styles.unassignBtn}
-                          onPress={() => handleUnassign(step.stepType)}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
-                          <Text style={styles.unassignIcon}>✕</Text>
-                        </TouchableOpacity>
-                      </TouchableOpacity>
-                    ) : (
                       <>
-                        <Text style={styles.stepSuggestion}>{step.productSuggestion}</Text>
                         <TouchableOpacity
-                          style={styles.assignBtn}
-                          onPress={() => setPickerStep(step.stepType)}
+                          style={styles.assignedCard}
+                          onPress={() => navigation.navigate('ProductDetail', { productId: assignedProduct.id })}
+                          activeOpacity={0.8}
+                        >
+                          {assignedProduct.imageUrl ? (
+                            <Image
+                              source={{ uri: assignedProduct.imageUrl }}
+                              style={[styles.assignedImg, { backgroundColor: catMeta!.bg }]}
+                              resizeMode="contain"
+                            />
+                          ) : (
+                            <View style={[styles.assignedImg, { backgroundColor: catMeta!.bg }]}>
+                              <Ionicons name={catMeta!.icon} size={20} color={catMeta!.color} />
+                            </View>
+                          )}
+                          <View style={styles.assignedInfo}>
+                            <Text style={styles.assignedName} numberOfLines={1}>{assignedProduct.name}</Text>
+                            <Text style={styles.assignedBrand}>{assignedProduct.brand}</Text>
+                          </View>
+                          <TouchableOpacity
+                            style={styles.unassignBtn}
+                            onPress={() => handleUnassign(step.stepType)}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <Ionicons name="close" size={13} color={colors.inkSoft} />
+                          </TouchableOpacity>
+                        </TouchableOpacity>
+
+                        {isManual ? (
+                          <View style={styles.manualBadgeBlock}>
+                            <View style={styles.manualBadge}>
+                              <Ionicons name="hand-left-outline" size={12} color={colors.gold} />
+                              <Text style={styles.manualBadgeText}>You picked this</Text>
+                            </View>
+                            <Text style={styles.manualBadgeDesc}>
+                              Won't change automatically — you'll always be asked first.
+                            </Text>
+                          </View>
+                        ) : (
+                          <Text style={styles.autoNote}>Auto-assigned</Text>
+                        )}
+
+                        <TouchableOpacity
+                          style={styles.altToggle}
+                          onPress={() => setAltStep(altStep === step.stepType ? null : step.stepType)}
                           activeOpacity={0.75}
                         >
-                          <Text style={styles.assignBtnIcon}>🔖</Text>
-                          <Text style={styles.assignBtnText}>Assign from My Shelf</Text>
+                          <Ionicons name="swap-horizontal-outline" size={13} color={colors.inkSoft} />
+                          <Text style={styles.altToggleText}>
+                            {altStep === step.stepType ? 'Hide alternatives' : "Don't love this? See alternatives"}
+                          </Text>
                         </TouchableOpacity>
+                        {altStep === step.stepType && (
+                          <AlternativesPanel
+                            source={assignedProduct}
+                            preferences={preferences}
+                            onPick={(product) => {
+                              handleAssign(step.stepType, product, 'manual');
+                              setAltStep(null);
+                            }}
+                          />
+                        )}
                       </>
+                    ) : (
+                      <RecommendedStep
+                        stepType={step.stepType}
+                        fallbackSuggestion={step.productSuggestion}
+                        skinType={skinType!}
+                        concerns={activeConcerns}
+                        preferences={preferences}
+                        onPick={(product) => handleAssign(step.stepType, product, 'auto')}
+                        onBrowseShelf={() => setPickerStep(step.stepType)}
+                      />
                     )}
                   </View>
                 );
               })}
             </View>
+          </View>
+        )}
+
+        {/* Routine Fit */}
+        {showFitSection && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Routine Fit</Text>
+            <Text style={styles.sectionSubtitle}>How well your picks match your skin</Text>
+
+            {concernCoverage.length > 0 && (
+              <View style={styles.fitCard}>
+                {concernCoverage.map(({ concern, covered, matchedProduct, matchedIngredient }, i) => (
+                  <View
+                    key={concern.id}
+                    style={[styles.fitRow, i < concernCoverage.length - 1 && styles.fitRowBorder]}
+                  >
+                    <Ionicons
+                      name={covered ? 'checkmark-circle' : 'alert-circle-outline'}
+                      size={18}
+                      color={covered ? colors.sage : colors.gold}
+                    />
+                    <View style={styles.fitRowText}>
+                      <Text style={styles.fitRowTitle}>{concern.label}</Text>
+                      <Text style={styles.fitRowDesc}>
+                        {covered
+                          ? `Covered by ${matchedProduct!.name} (${matchedIngredient})`
+                          : `No assigned product has ${concern.keyIngredient} yet`}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {cautions.length > 0 && (
+              <View style={[styles.fitCard, concernCoverage.length > 0 && { marginTop: 10 }]}>
+                {cautions.map((c, i) => (
+                  <View
+                    key={`${c.product.id}-${c.type}`}
+                    style={[styles.fitRow, i < cautions.length - 1 && styles.fitRowBorder]}
+                  >
+                    <Ionicons name="warning-outline" size={18} color={colors.clay} />
+                    <View style={styles.fitRowText}>
+                      <Text style={styles.fitRowTitle}>
+                        {STEP_TYPE_LABELS[c.stepType] ?? c.stepType}: {c.product.name}
+                      </Text>
+                      <Text style={styles.fitRowDesc}>
+                        Contains {c.ingredients.join(', ')} — {c.type === 'comedogenic' ? 'pore-clogging' : 'a common irritant'} for {skinType} skin
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         )}
 
@@ -314,7 +465,7 @@ export default function RoutineScreen() {
         visible={pickerStep !== null}
         stepType={pickerStep ?? ''}
         stepLabel={pickerStepLabel}
-        onSelect={(product) => handleAssign(pickerStep!, product)}
+        onSelect={(product) => handleAssign(pickerStep!, product, 'manual')}
         onClose={() => setPickerStep(null)}
       />
     </SafeAreaView>
@@ -331,30 +482,37 @@ function ConcernCard({ concern }: { concern: Concern }) {
     >
       <View style={styles.concernCardHeader}>
         <View style={styles.concernCardLeft}>
-          <Text style={styles.concernCardIcon}>{concern.icon}</Text>
+          <View style={styles.concernCardIconBox}>
+            <Ionicons name={concern.icon} size={22} color={colors.sage} />
+          </View>
           <View>
             <Text style={styles.concernCardLabel}>{concern.label}</Text>
             <Text style={styles.concernKeyIng}>Key ingredient: {concern.keyIngredient}</Text>
           </View>
         </View>
-        <Text style={styles.expandChevron}>{expanded ? '▲' : '▼'}</Text>
+        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.inkSoft} />
       </View>
       {expanded && (
         <View style={styles.concernCardBody}>
           <View style={styles.tipRow}>
-            <View style={[styles.tipBadge, { backgroundColor: '#FEF9E7' }]}>
-              <Text style={styles.tipBadgeText}>☀️ AM</Text>
+            <View style={[styles.tipBadge, { backgroundColor: colors.goldSoft }]}>
+              <Ionicons name="sunny-outline" size={12} color={colors.inkSoft} />
+              <Text style={styles.tipBadgeText}>AM</Text>
             </View>
             <Text style={styles.tipText}>{concern.amTip}</Text>
           </View>
           <View style={styles.tipRow}>
-            <View style={[styles.tipBadge, { backgroundColor: '#EAF0FB' }]}>
-              <Text style={styles.tipBadgeText}>🌙 PM</Text>
+            <View style={[styles.tipBadge, { backgroundColor: colors.sageSoft }]}>
+              <Ionicons name="moon-outline" size={12} color={colors.inkSoft} />
+              <Text style={styles.tipBadgeText}>PM</Text>
             </View>
             <Text style={styles.tipText}>{concern.pmTip}</Text>
           </View>
           <View style={styles.avoidBox}>
-            <Text style={styles.avoidLabel}>⚠️ Avoid</Text>
+            <View style={styles.avoidLabelRow}>
+              <Ionicons name="warning-outline" size={12} color={colors.clay} />
+              <Text style={styles.avoidLabel}>Avoid</Text>
+            </View>
             <Text style={styles.avoidText}>{concern.avoid}</Text>
           </View>
         </View>
@@ -363,120 +521,404 @@ function ConcernCard({ concern }: { concern: Concern }) {
   );
 }
 
+function RecommendedStep({
+  stepType,
+  fallbackSuggestion,
+  skinType,
+  concerns,
+  preferences,
+  onPick,
+  onBrowseShelf,
+}: {
+  stepType: string;
+  fallbackSuggestion: string;
+  skinType: SkinType;
+  concerns: Concern[];
+  preferences: RecommendationPreferences;
+  onPick: (product: Product) => void;
+  onBrowseShelf: () => void;
+}) {
+  const recs = recommendForStep(stepType, skinType, concerns, preferences, 2);
+
+  if (recs.length === 0) {
+    return (
+      <>
+        <Text style={styles.stepSuggestion}>{fallbackSuggestion}</Text>
+        <TouchableOpacity style={styles.assignBtn} onPress={onBrowseShelf} activeOpacity={0.75}>
+          <Ionicons name="bookmark-outline" size={14} color={colors.inkSoft} />
+          <Text style={styles.assignBtnText}>Assign from My Shelf</Text>
+        </TouchableOpacity>
+      </>
+    );
+  }
+
+  return (
+    <View style={{ gap: 8 }}>
+      {recs.map(({ product, reason, tags }) => {
+        const meta = CATEGORY_META[product.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
+        return (
+          <PressableScale
+            key={product.id}
+            style={styles.recRow}
+            onPress={() => onPick(product)}
+          >
+            <View style={[styles.recIconBox, { backgroundColor: meta.bg }]}>
+              <Ionicons name={meta.icon} size={16} color={meta.color} />
+            </View>
+            <View style={styles.recInfo}>
+              <Text style={styles.recName} numberOfLines={1}>{product.name}</Text>
+              {tags.length > 0 && (
+                <View style={styles.recTagsRow}>
+                  {tags.map((tag) => (
+                    <View key={tag} style={styles.recTag}>
+                      <Text style={styles.recTagText}>{tag}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+              <Text style={styles.recReason} numberOfLines={2}>{reason}</Text>
+            </View>
+            <Ionicons name="add-circle-outline" size={20} color={colors.sage} />
+          </PressableScale>
+        );
+      })}
+      <TouchableOpacity style={styles.assignBtn} onPress={onBrowseShelf} activeOpacity={0.75}>
+        <Ionicons name="bookmark-outline" size={14} color={colors.inkSoft} />
+        <Text style={styles.assignBtnText}>Or assign from My Shelf</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function AlternativesPanel({
+  source,
+  preferences,
+  onPick,
+}: {
+  source: Product;
+  preferences: RecommendationPreferences;
+  onPick: (product: Product) => void;
+}) {
+  const medianPrice = categoryMedianPrice(PRODUCTS.filter((p) => p.category === source.category));
+
+  // Preferences nudge which alternatives surface first, but the displayed
+  // match % always stays the real, untouched similarity score from
+  // findDupes — never blended with the preference nudge.
+  const dupes = findDupes(source, PRODUCTS)
+    .filter((d) => d.score > 0)
+    .map((dupe) => ({ dupe, ...scorePreferenceFit(dupe.product, preferences, medianPrice) }))
+    .sort((a, b) => (b.dupe.score + b.bonus) - (a.dupe.score + a.bonus))
+    .slice(0, 5);
+
+  if (dupes.length === 0) {
+    return (
+      <View style={styles.altPanel}>
+        <Text style={styles.altEmpty}>No close alternative found in the catalog yet for this product.</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.altPanel}>
+      {dupes.map(({ dupe, tags }) => {
+        const meta = CATEGORY_META[dupe.product.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
+        const priceLabel = (source.price === 0 || dupe.product.price === 0)
+          ? 'No price data'
+          : dupe.priceDiff === 0 ? 'Same price' : dupe.priceDiff > 0 ? `$${dupe.priceDiff} more` : `$${Math.abs(dupe.priceDiff)} less`;
+        return (
+          <PressableScale
+            key={dupe.product.id}
+            style={styles.recRow}
+            onPress={() => onPick(dupe.product)}
+          >
+            <View style={[styles.recIconBox, { backgroundColor: meta.bg }]}>
+              <Ionicons name={meta.icon} size={16} color={meta.color} />
+            </View>
+            <View style={styles.recInfo}>
+              <Text style={styles.recName} numberOfLines={1}>{dupe.product.name}</Text>
+              {tags.length > 0 && (
+                <View style={styles.recTagsRow}>
+                  {tags.map((tag) => (
+                    <View key={tag} style={styles.recTag}>
+                      <Text style={styles.recTagText}>{tag}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+              <Text style={styles.recReason} numberOfLines={2}>
+                {dupeExplanation(dupe)} · {priceLabel}
+              </Text>
+            </View>
+            <View style={[styles.smallScorePill, { backgroundColor: scoreBgColor(dupe.score) }]}>
+              <Text style={[styles.smallScorePillNum, { color: scoreColor(dupe.score) }]}>{dupe.score}</Text>
+            </View>
+          </PressableScale>
+        );
+      })}
+    </View>
+  );
+}
+
+function currencySymbol(currency?: 'USD' | 'INR'): string {
+  return currency === 'INR' ? '₹' : '$';
+}
+
+function RoutineCostCard({ summary }: { summary: RoutineCostSummary }) {
+  const [expanded, setExpanded] = useState(false);
+  const symbol = currencySymbol(summary.breakdown.find((l) => l.product?.currency)?.product?.currency);
+
+  return (
+    <TouchableOpacity style={styles.costCard} onPress={() => setExpanded((v) => !v)} activeOpacity={0.85}>
+      <View style={styles.costHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.costLabel}>Your routine</Text>
+          <Text style={styles.costTotal}>{symbol}{summary.total.toFixed(2)}/month</Text>
+          {summary.hasIncompleteData && (
+            <Text style={styles.costIncomplete}>Some assigned products are missing price data</Text>
+          )}
+        </View>
+        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.sage} />
+      </View>
+
+      {expanded && (
+        <View style={styles.costBreakdown}>
+          {summary.breakdown.map((line, i) => (
+            <CostRow
+              key={line.stepType}
+              line={line}
+              symbol={symbol}
+              isLast={i === summary.breakdown.length - 1}
+            />
+          ))}
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+}
+
+function CostRow({ line, symbol, isLast }: { line: RoutineCostLine; symbol: string; isLast: boolean }) {
+  const [showInfo, setShowInfo] = useState(false);
+  const stepLabel = STEP_TYPE_LABELS[line.stepType] ?? line.stepType;
+  const canExplain = !!line.product && line.monthlyCost !== undefined;
+
+  return (
+    <View style={[styles.costRow, !isLast && styles.costRowBorder]}>
+      <View style={styles.costRowTop}>
+        <Text style={styles.costRowStep}>{stepLabel}</Text>
+        {canExplain && (
+          <TouchableOpacity
+            onPress={() => setShowInfo((v) => !v)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="information-circle-outline" size={15} color={colors.inkSoft} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {!line.product ? (
+        <Text style={styles.costRowNotSet}>Not set</Text>
+      ) : line.monthlyCost === undefined ? (
+        <Text style={styles.costRowNoData} numberOfLines={1}>{line.product.name} — no price/size data</Text>
+      ) : (
+        <>
+          <View style={styles.costRowMain}>
+            <Text style={styles.costRowProduct} numberOfLines={1}>{line.product.name}</Text>
+            <Text style={styles.costRowAmount}>{symbol}{line.monthlyCost.toFixed(2)}/mo</Text>
+          </View>
+          <Text style={styles.costRowSub}>{symbol}{line.costPerUse!.toFixed(2)}/use</Text>
+        </>
+      )}
+
+      {showInfo && canExplain && (
+        <View style={styles.costInfoBox}>
+          <Text style={styles.costInfoText}>
+            {symbol}{line.product!.price} ÷ {estimatedUses(line.product!)} estimated uses = {symbol}{line.costPerUse!.toFixed(2)}/use.
+            {' '}Assumes ~{PER_USE_ML[line.product!.category]}ml per use for {line.product!.category}, applied {line.timesPerDay}×/day.
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAFAF8' },
+  container: { flex: 1, backgroundColor: colors.paper },
   content: { padding: 20, paddingBottom: 40, gap: 20 },
 
   header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  brandLogo: { fontSize: 26, fontWeight: '800', color: '#1A1A2E', letterSpacing: -0.5 },
-  brandSub: { fontSize: 13, color: '#AAA', marginTop: 2 },
-  editBtn: { backgroundColor: '#F0E6FF', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
-  editBtnText: { fontSize: 12, fontWeight: '700', color: '#9B59B6' },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  brandLogo: { ...typography.screenTitle, color: colors.ink },
+  brandSub: { ...typography.body, color: colors.inkSoft, marginTop: 2 },
+  editBtn: { backgroundColor: colors.sageSoft, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
+  editBtnText: { ...typography.bodyStrong, fontSize: 12, color: colors.sage },
 
-  profileCard: {
-    backgroundColor: '#FFF', borderRadius: 18, padding: 16,
-    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
-  },
+  profileCard: { ...cardStyle },
   profileLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  profileIcon: { fontSize: 32 },
-  profileSkinType: { fontSize: 17, fontWeight: '700', color: '#1A1A2E', marginBottom: 6 },
+  profileIconBox: {
+    width: 48, height: 48, borderRadius: 14, backgroundColor: colors.sageSoft,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  profileSkinType: { ...typography.cardTitle, color: colors.ink, marginBottom: 6 },
   concernChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  concernChip: { backgroundColor: '#F0E6FF', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  concernChipText: { fontSize: 11, color: '#9B59B6', fontWeight: '600' },
-  addConcernsText: { fontSize: 12, color: '#C8A2C8', fontWeight: '600' },
+  concernChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: colors.sageSoft, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3,
+  },
+  concernChipText: { fontSize: 11, color: colors.sage, fontWeight: '600' },
+  addConcernsText: { ...typography.bodyStrong, fontSize: 12, color: colors.sage },
 
-  heading: { fontSize: 20, fontWeight: '700', color: '#1A1A2E' },
+  costCard: { ...cardStyle },
+  costHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  costLabel: { ...typography.eyebrow, color: colors.inkSoft },
+  costTotal: { fontFamily: fontFamilies.serif, fontSize: 22, fontWeight: '700', color: colors.ink, marginTop: 2 },
+  costIncomplete: { fontSize: 11, color: colors.gold, marginTop: 3 },
+
+  costBreakdown: { marginTop: 14, gap: 10 },
+  costRow: { paddingTop: 10 },
+  costRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.line, paddingBottom: 10 },
+  costRowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  costRowStep: { ...typography.eyebrow, fontSize: 11, color: colors.inkSoft, letterSpacing: 0.5 },
+  costRowNotSet: { ...typography.body, color: colors.inkSoft, fontStyle: 'italic', marginTop: 3 },
+  costRowNoData: { ...typography.body, color: colors.inkSoft, marginTop: 3 },
+  costRowMain: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 3 },
+  costRowProduct: { ...typography.bodyStrong, color: colors.ink, flex: 1, marginRight: 8 },
+  costRowAmount: { ...typography.bodyStrong, color: colors.ink },
+  costRowSub: { fontSize: 11, color: colors.inkSoft, marginTop: 1 },
+  costInfoBox: { backgroundColor: colors.paper, borderRadius: 10, padding: 10, marginTop: 8 },
+  costInfoText: { fontSize: 11, color: colors.inkSoft, lineHeight: 16 },
+
+  heading: { ...typography.screenTitle, fontSize: 20, color: colors.ink },
   skinGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   skinCard: {
-    width: '47%', backgroundColor: '#FFF', borderRadius: 16, padding: 14,
-    borderWidth: 2, borderColor: '#EBEBEB', gap: 3,
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+    width: '47%', ...cardStyle, padding: 14, gap: 3,
   },
-  skinCardActive: { borderColor: '#C8A2C8', backgroundColor: '#FCF5FC' },
-  skinIcon: { fontSize: 22 },
-  skinLabel: { fontSize: 14, fontWeight: '700', color: '#1A1A2E' },
-  skinLabelActive: { color: '#9B59B6' },
-  skinDesc: { fontSize: 11, color: '#AAA', lineHeight: 15 },
+  skinCardActive: { borderColor: colors.sage, backgroundColor: colors.sageSoft },
+  skinLabel: { ...typography.bodyStrong, fontSize: 14, color: colors.ink },
+  skinLabelActive: { color: colors.sage },
+  skinDesc: { fontSize: 11, color: colors.inkSoft, lineHeight: 15 },
 
   section: { gap: 12 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#1A1A2E' },
-  sectionSubtitle: { fontSize: 13, color: '#AAA', marginTop: -6 },
+  sectionTitle: { ...typography.screenTitle, fontSize: 20, color: colors.ink },
+  sectionSubtitle: { ...typography.body, color: colors.inkSoft, marginTop: -6 },
 
-  steps: { gap: 10 },
-  stepCard: { borderRadius: 16, padding: 14, gap: 10 },
+  fitCard: { ...cardStyle, padding: 0, overflow: 'hidden' },
+  fitRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 14 },
+  fitRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.line },
+  fitRowText: { flex: 1, gap: 2 },
+  fitRowTitle: { ...typography.bodyStrong, color: colors.ink },
+  fitRowDesc: { fontSize: 12, color: colors.inkSoft, lineHeight: 17 },
+
+  steps: { gap: 12 },
+  stepCard: { ...cardStyle, gap: 10 },
+  stepCardManual: { borderWidth: borders.manualOverride, borderColor: colors.gold },
   stepHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  stepIcon: { fontSize: 18 },
-  stepLabel: { flex: 1, fontSize: 12, fontWeight: '700', color: '#555', textTransform: 'uppercase' },
+  stepLabel: { ...typography.eyebrow, flex: 1, color: colors.inkSoft },
   stepNum: {
     width: 22, height: 22, borderRadius: 11,
-    backgroundColor: 'rgba(0,0,0,0.08)', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.sageSoft, alignItems: 'center', justifyContent: 'center',
   },
-  stepNumText: { fontSize: 11, fontWeight: '800', color: '#555' },
-  stepSuggestion: { fontSize: 13, color: '#666', lineHeight: 19 },
+  stepNumText: { fontSize: 11, fontWeight: '800', color: colors.sage },
+  stepSuggestion: { ...typography.body, color: colors.inkSoft, lineHeight: 19 },
 
   assignBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.7)', borderRadius: 10,
+    backgroundColor: colors.paper, borderRadius: 10,
     paddingHorizontal: 12, paddingVertical: 9,
-    borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)',
+    borderWidth: 1, borderColor: colors.line,
   },
-  assignBtnIcon: { fontSize: 14 },
-  assignBtnText: { fontSize: 12, fontWeight: '700', color: '#555' },
+  assignBtnText: { ...typography.bodyStrong, fontSize: 12, color: colors.inkSoft },
+
+  recRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: colors.paper, borderRadius: 12, padding: 10,
+  },
+  recIconBox: {
+    width: 34, height: 34, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  recInfo: { flex: 1, minWidth: 0, gap: 1 },
+  recName: { ...typography.bodyStrong, color: colors.ink, flexShrink: 1 },
+  recTagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 3 },
+  recTag: { backgroundColor: colors.sageSoft, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  recTagText: { fontSize: 9, fontWeight: '700', color: colors.sage, textTransform: 'uppercase', letterSpacing: 0.3 },
+  smallScorePill: { borderRadius: 8, width: 32, height: 32, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  smallScorePillNum: { fontSize: 13, fontWeight: '800' },
+  recReason: { fontSize: 11, color: colors.inkSoft, lineHeight: 14 },
+
+  altToggle: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    alignSelf: 'flex-start', marginTop: 8, paddingVertical: 2,
+  },
+  altToggleText: { ...typography.bodyStrong, fontSize: 12, color: colors.inkSoft },
+  altPanel: { gap: 8, marginTop: 10 },
+  altEmpty: { fontSize: 12, color: colors.inkSoft, fontStyle: 'italic' },
 
   assignedCard: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: 12, padding: 10,
+    backgroundColor: colors.paper, borderRadius: 12, padding: 10,
   },
   assignedImg: {
     width: 44, height: 44, borderRadius: 10,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   assignedInfo: { flex: 1 },
-  assignedName: { fontSize: 13, fontWeight: '700', color: '#1A1A2E' },
-  assignedBrand: { fontSize: 11, color: '#888', marginTop: 1 },
+  assignedName: { ...typography.bodyStrong, color: colors.ink },
+  assignedBrand: { fontSize: 11, color: colors.inkSoft, marginTop: 1 },
   unassignBtn: {
     width: 28, height: 28, borderRadius: 14,
-    backgroundColor: 'rgba(0,0,0,0.08)', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.line, alignItems: 'center', justifyContent: 'center',
   },
-  unassignIcon: { fontSize: 11, color: '#666', fontWeight: '700' },
 
-  concernCard: {
-    backgroundColor: '#FFF', borderRadius: 16, padding: 14,
-    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, elevation: 1,
+  manualBadgeBlock: { gap: 4 },
+  manualBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start',
+    backgroundColor: colors.goldSoft, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4,
   },
+  manualBadgeText: { fontSize: 11, fontWeight: '700', color: colors.gold },
+  manualBadgeDesc: { fontSize: 11, color: colors.inkSoft, lineHeight: 15 },
+  autoNote: { fontSize: 11, color: colors.inkSoft },
+
+  concernCard: { ...cardStyle },
   concernCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   concernCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  concernCardIcon: { fontSize: 28 },
-  concernCardLabel: { fontSize: 15, fontWeight: '700', color: '#1A1A2E' },
-  concernKeyIng: { fontSize: 12, color: '#AAA', marginTop: 2 },
-  expandChevron: { fontSize: 11, color: '#CCC' },
+  concernCardIconBox: {
+    width: 44, height: 44, borderRadius: 13, backgroundColor: colors.sageSoft,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  concernCardLabel: { ...typography.cardTitle, color: colors.ink },
+  concernKeyIng: { fontSize: 12, color: colors.inkSoft, marginTop: 2 },
   concernCardBody: { marginTop: 14, gap: 10 },
   tipRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
-  tipBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, flexShrink: 0 },
-  tipBadgeText: { fontSize: 11, fontWeight: '700', color: '#555' },
-  tipText: { fontSize: 13, color: '#555', lineHeight: 19, flex: 1 },
-  avoidBox: {
-    backgroundColor: '#FFF5F5', borderRadius: 10, padding: 12, gap: 4,
-    borderLeftWidth: 3, borderLeftColor: '#E74C3C',
+  tipBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, flexShrink: 0,
   },
-  avoidLabel: { fontSize: 12, fontWeight: '700', color: '#C0392B' },
-  avoidText: { fontSize: 12, color: '#888', lineHeight: 17 },
+  tipBadgeText: { fontSize: 11, fontWeight: '700', color: colors.inkSoft },
+  tipText: { ...typography.body, color: colors.inkSoft, lineHeight: 19, flex: 1 },
+  avoidBox: {
+    backgroundColor: colors.claySoft, borderRadius: 10, padding: 12, gap: 4,
+    borderLeftWidth: 3, borderLeftColor: colors.clay,
+  },
+  avoidLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  avoidLabel: { fontSize: 12, fontWeight: '700', color: colors.clay },
+  avoidText: { fontSize: 12, color: colors.inkSoft, lineHeight: 17 },
 
-  hint: { textAlign: 'center', color: '#CCC', fontSize: 14 },
+  hint: { textAlign: 'center', color: colors.inkSoft, fontSize: 14 },
 
   banner: {
-    backgroundColor: '#F0E6FF', borderRadius: 18, padding: 16, gap: 12,
-    borderWidth: 1.5, borderColor: '#DDD0EE',
+    backgroundColor: colors.sageSoft, borderRadius: 18, padding: 16, gap: 12,
+    borderWidth: 1, borderColor: colors.line,
   },
   bannerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  bannerTitle: { fontSize: 15, fontWeight: '800', color: '#1A1A2E' },
-  bannerClose: { fontSize: 14, color: '#AAA', fontWeight: '700' },
+  bannerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  bannerTitle: { ...typography.cardTitle, fontWeight: '800', color: colors.ink },
   bannerSteps: { gap: 7 },
-  bannerStep: { fontSize: 13, color: '#555', lineHeight: 19 },
-  bannerTabName: { fontWeight: '700', color: '#9B59B6' },
+  bannerStepRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  bannerStep: { flex: 1, ...typography.body, color: colors.inkSoft, lineHeight: 19 },
+  bannerTabName: { fontWeight: '700', color: colors.sage },
   bannerBtn: {
-    backgroundColor: '#C8A2C8', borderRadius: 12,
+    backgroundColor: colors.sage, borderRadius: 12,
     paddingVertical: 11, alignItems: 'center',
   },
-  bannerBtnText: { fontSize: 13, fontWeight: '700', color: '#FFF' },
+  bannerBtnText: { ...typography.bodyStrong, color: colors.surface },
 });

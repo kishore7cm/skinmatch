@@ -2,18 +2,21 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { OnboardingStackParamList } from '../../types/navigation';
 import { SkinType } from '../../types';
 import { saveProfile } from '../../utils/profileStorage';
+import { IoniconName } from '../../components/ProductCard';
+import { colors, typography, cardStyle } from '../../theme';
 
 type Nav = NativeStackNavigationProp<OnboardingStackParamList, 'SkinType'>;
 
-const SKIN_TYPES: { type: SkinType; icon: string; label: string; description: string }[] = [
-  { type: 'oily',        icon: '💧', label: 'Oily',        description: 'Shiny, enlarged pores, prone to breakouts' },
-  { type: 'dry',         icon: '🌵', label: 'Dry',         description: 'Tight, flaky, rough or dull feeling' },
-  { type: 'combination', icon: '☯️', label: 'Combination', description: 'Oily T-zone, dry or normal cheeks' },
-  { type: 'sensitive',   icon: '🌸', label: 'Sensitive',   description: 'Easily irritated, redness or stinging' },
-  { type: 'normal',      icon: '✨', label: 'Normal',      description: 'Balanced, few concerns, even texture' },
+const SKIN_TYPES: { type: SkinType; icon: IoniconName; label: string; description: string }[] = [
+  { type: 'oily',        icon: 'water',            label: 'Oily',        description: 'Shiny, enlarged pores, prone to breakouts' },
+  { type: 'dry',         icon: 'snow-outline',     label: 'Dry',         description: 'Tight, flaky, rough or dull feeling' },
+  { type: 'combination', icon: 'contrast-outline', label: 'Combination', description: 'Oily T-zone, dry or normal cheeks' },
+  { type: 'sensitive',   icon: 'flower-outline',   label: 'Sensitive',   description: 'Easily irritated, redness or stinging' },
+  { type: 'normal',      icon: 'sparkles',         label: 'Normal',      description: 'Balanced, few concerns, even texture' },
 ];
 
 export default function OnboardingSkinType() {
@@ -33,6 +36,7 @@ export default function OnboardingSkinType() {
         <View style={styles.progress}>
           <View style={[styles.dot, styles.dotActive]} />
           <View style={styles.dot} />
+          <View style={styles.dot} />
         </View>
 
         <Text style={styles.heading}>What's your skin type?</Text>
@@ -48,12 +52,12 @@ export default function OnboardingSkinType() {
                 onPress={() => setSelected(type)}
                 activeOpacity={0.75}
               >
-                <Text style={styles.cardIcon}>{icon}</Text>
+                <Ionicons name={icon} size={26} color={active ? colors.sage : colors.ink} style={styles.cardIcon} />
                 <Text style={[styles.cardLabel, active && styles.cardLabelActive]}>{label}</Text>
                 <Text style={[styles.cardDesc, active && styles.cardDescActive]} numberOfLines={2}>
                   {description}
                 </Text>
-                {active && <View style={styles.checkmark}><Text style={styles.checkmarkText}>✓</Text></View>}
+                {active && <View style={styles.checkmark}><Ionicons name="checkmark" size={13} color={colors.surface} /></View>}
               </TouchableOpacity>
             );
           })}
@@ -78,43 +82,39 @@ export default function OnboardingSkinType() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAFAF8' },
+  container: { flex: 1, backgroundColor: colors.paper },
   content: { padding: 24, paddingBottom: 8 },
 
   progress: { flexDirection: 'row', gap: 6, marginBottom: 28 },
-  dot: { height: 4, width: 16, borderRadius: 2, backgroundColor: '#E5E5E5' },
-  dotActive: { width: 32, backgroundColor: '#C8A2C8' },
+  dot: { height: 4, width: 16, borderRadius: 2, backgroundColor: colors.line },
+  dotActive: { width: 32, backgroundColor: colors.sage },
 
-  heading: { fontSize: 28, fontWeight: '800', color: '#1A1A2E', letterSpacing: -0.5, marginBottom: 8 },
-  subheading: { fontSize: 14, color: '#AAA', marginBottom: 28, lineHeight: 20 },
+  heading: { ...typography.screenTitle, fontSize: 28, color: colors.ink, marginBottom: 8 },
+  subheading: { ...typography.body, fontSize: 14, color: colors.inkSoft, marginBottom: 28, lineHeight: 20 },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   card: {
-    width: '47%', backgroundColor: '#FFF', borderRadius: 18,
-    padding: 16, borderWidth: 2, borderColor: '#EBEBEB', gap: 4, position: 'relative',
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, elevation: 1,
+    width: '47%', ...cardStyle, padding: 16, gap: 4, position: 'relative',
   },
-  cardActive: { borderColor: '#C8A2C8', backgroundColor: '#FCF5FC' },
-  cardIcon: { fontSize: 28, marginBottom: 4 },
-  cardLabel: { fontSize: 16, fontWeight: '700', color: '#1A1A2E' },
-  cardLabelActive: { color: '#9B59B6' },
-  cardDesc: { fontSize: 12, color: '#AAA', lineHeight: 17 },
-  cardDescActive: { color: '#BF8FBF' },
+  cardActive: { borderColor: colors.sage, backgroundColor: colors.sageSoft },
+  cardIcon: { marginBottom: 4 },
+  cardLabel: { fontSize: 16, fontWeight: '700', color: colors.ink },
+  cardLabelActive: { color: colors.sage },
+  cardDesc: { fontSize: 12, color: colors.inkSoft, lineHeight: 17 },
+  cardDescActive: { color: colors.sage },
   checkmark: {
     position: 'absolute', top: 10, right: 10,
     width: 22, height: 22, borderRadius: 11,
-    backgroundColor: '#C8A2C8', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.sage, alignItems: 'center', justifyContent: 'center',
   },
-  checkmarkText: { fontSize: 12, color: '#FFF', fontWeight: '800' },
 
   footer: { padding: 24, paddingTop: 12, gap: 8 },
   btn: {
-    backgroundColor: '#C8A2C8', borderRadius: 16, paddingVertical: 17,
+    backgroundColor: colors.sage, borderRadius: 16, paddingVertical: 17,
     alignItems: 'center',
-    shadowColor: '#C8A2C8', shadowOpacity: 0.35, shadowRadius: 10, elevation: 3,
   },
-  btnDisabled: { backgroundColor: '#E5E5E5', shadowOpacity: 0 },
-  btnText: { fontSize: 17, fontWeight: '800', color: '#FFF' },
+  btnDisabled: { backgroundColor: colors.line },
+  btnText: { fontSize: 17, fontWeight: '800', color: colors.surface },
   skipBtn: { alignItems: 'center', paddingVertical: 6 },
-  skipText: { fontSize: 13, color: '#CCC' },
+  skipText: { fontSize: 13, color: colors.inkSoft },
 });

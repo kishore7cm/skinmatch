@@ -2,15 +2,18 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { OnboardingStackParamList } from '../../types/navigation';
+import { IoniconName } from '../../components/ProductCard';
+import { colors, typography, fontFamilies } from '../../theme';
 
 type Nav = NativeStackNavigationProp<OnboardingStackParamList, 'Welcome'>;
 
-const FEATURES = [
-  { icon: '🧴', title: 'Personalized routine', body: 'Built around your skin type and concerns' },
-  { icon: '🔬', title: 'Ingredient intelligence', body: 'Flag comedogenic and irritating ingredients instantly' },
-  { icon: '🔄', title: 'Find dupes', body: 'Scored by ingredient overlap, not just category' },
-  { icon: '⚠️', title: 'Conflict checker', body: 'Know which products shouldn\'t be used together' },
+const FEATURES: { icon: IoniconName; title: string; body: string }[] = [
+  { icon: 'clipboard-outline', title: 'Personalized routine', body: 'Built around your skin type and concerns' },
+  { icon: 'flask-outline', title: 'Ingredient intelligence', body: 'Flag comedogenic and irritating ingredients instantly' },
+  { icon: 'swap-horizontal-outline', title: 'Find dupes', body: 'Scored by ingredient overlap, not just category' },
+  { icon: 'warning-outline', title: 'Conflict checker', body: 'Know which products shouldn\'t be used together' },
 ];
 
 export default function OnboardingWelcome() {
@@ -23,7 +26,7 @@ export default function OnboardingWelcome() {
         {/* Logo area */}
         <View style={styles.logoArea}>
           <View style={styles.logoCircle}>
-            <Text style={styles.logoEmoji}>✨</Text>
+            <Ionicons name="sparkles" size={40} color={colors.sage} />
           </View>
           <Text style={styles.wordmark}>SkinMatch</Text>
           <Text style={styles.tagline}>Personalized skincare.{'\n'}Ingredient intelligence.</Text>
@@ -34,7 +37,7 @@ export default function OnboardingWelcome() {
           {FEATURES.map((f) => (
             <View key={f.icon} style={styles.featureRow}>
               <View style={styles.featureIconBox}>
-                <Text style={styles.featureIcon}>{f.icon}</Text>
+                <Ionicons name={f.icon} size={22} color={colors.sage} />
               </View>
               <View style={styles.featureText}>
                 <Text style={styles.featureTitle}>{f.title}</Text>
@@ -62,39 +65,36 @@ export default function OnboardingWelcome() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAFAF8' },
+  container: { flex: 1, backgroundColor: colors.paper },
   inner: { flex: 1, paddingHorizontal: 28, justifyContent: 'space-between', paddingTop: 20, paddingBottom: 12 },
 
   logoArea: { alignItems: 'center', gap: 12, paddingTop: 16 },
   logoCircle: {
     width: 88, height: 88, borderRadius: 28,
-    backgroundColor: '#F0E6FF',
+    backgroundColor: colors.sageSoft,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#C8A2C8', shadowOpacity: 0.3, shadowRadius: 12, elevation: 4,
+    borderWidth: 1, borderColor: colors.line,
   },
-  logoEmoji: { fontSize: 44 },
-  wordmark: { fontSize: 36, fontWeight: '800', color: '#1A1A2E', letterSpacing: -1 },
-  tagline: { fontSize: 16, color: '#888', textAlign: 'center', lineHeight: 24 },
+  wordmark: { fontFamily: fontFamilies.serif, fontSize: 36, fontWeight: '700', color: colors.ink, letterSpacing: -1 },
+  tagline: { ...typography.body, fontSize: 16, color: colors.inkSoft, textAlign: 'center', lineHeight: 24 },
 
   features: { gap: 16 },
   featureRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
   featureIconBox: {
     width: 44, height: 44, borderRadius: 14,
-    backgroundColor: '#F5F0FF',
+    backgroundColor: colors.sageSoft,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  featureIcon: { fontSize: 22 },
   featureText: { flex: 1, justifyContent: 'center' },
-  featureTitle: { fontSize: 15, fontWeight: '700', color: '#1A1A2E' },
-  featureBody: { fontSize: 13, color: '#AAA', marginTop: 2, lineHeight: 18 },
+  featureTitle: { ...typography.cardTitle, color: colors.ink },
+  featureBody: { fontSize: 13, color: colors.inkSoft, marginTop: 2, lineHeight: 18 },
 
   footer: { gap: 10 },
   ctaBtn: {
-    backgroundColor: '#C8A2C8',
+    backgroundColor: colors.sage,
     borderRadius: 16, paddingVertical: 17,
     alignItems: 'center',
-    shadowColor: '#C8A2C8', shadowOpacity: 0.4, shadowRadius: 10, elevation: 4,
   },
-  ctaBtnText: { fontSize: 17, fontWeight: '800', color: '#FFF', letterSpacing: 0.2 },
-  disclaimer: { fontSize: 12, color: '#CCC', textAlign: 'center' },
+  ctaBtnText: { fontSize: 17, fontWeight: '800', color: colors.surface, letterSpacing: 0.2 },
+  disclaimer: { fontSize: 12, color: colors.inkSoft, textAlign: 'center' },
 });

@@ -1,26 +1,52 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, Modal, TextInput } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { PRODUCTS } from '../data/products';
 import { getCachedProduct } from '../utils/productCache';
 import { findDupes, dupeExplanation } from '../utils/matching';
 import { getIngredientFlag, countFlags } from '../utils/ingredientUtils';
-import { CATEGORY_META } from '../components/ProductCard';
+import { CATEGORY_META, IoniconName } from '../components/ProductCard';
 import { isOnShelf, toggleShelf } from '../utils/shelfStorage';
+import { getPriceOverride, setPriceOverride as savePriceOverride, PriceOverride } from '../utils/priceOverrides';
 import { AppStackParamList, ProductDetailScreenProps } from '../types/navigation';
+import { colors, typography, fontFamilies, cardStyle, scoreColor, scoreBgColor } from '../theme';
+import { useToast } from '../context/ToastContext';
+import PressableScale from '../components/PressableScale';
+
+function formatUpdatedAt(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
 
 export default function ProductDetailScreen({ route, navigation }: ProductDetailScreenProps) {
   const [saved, setSaved] = useState(false);
+  const [priceOverride, setPriceOverrideState] = useState<PriceOverride | null>(null);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
   const productId = route.params.productId;
-  const product = PRODUCTS.find((p) => p.id === productId) ?? getCachedProduct(productId);
+  const baseProduct = PRODUCTS.find((p) => p.id === productId) ?? getCachedProduct(productId);
+  const product = baseProduct && priceOverride
+    ? { ...baseProduct, price: priceOverride.price, priceUpdatedAt: priceOverride.updatedAt }
+    : baseProduct;
   const innerNav = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
+  const { showToast } = useToast();
 
   useFocusEffect(
     useCallback(() => {
-      if (product) isOnShelf(product.id).then(setSaved);
-    }, [product?.id]),
+      if (baseProduct) {
+        isOnShelf(baseProduct.id).then(setSaved);
+        getPriceOverride(baseProduct.id).then((o) => setPriceOverrideState(o ?? null));
+      }
+    }, [baseProduct?.id]),
   );
+
+  async function handleReportPrice(newPrice: number) {
+    if (!baseProduct) return;
+    const entry = await savePriceOverride(baseProduct.id, newPrice);
+    setPriceOverrideState(entry);
+    setReportModalOpen(false);
+    showToast('Price updated');
+  }
 
   useEffect(() => {
     if (!product) return;
@@ -28,7 +54,7 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
       title: product.name,
       headerRight: () => (
         <TouchableOpacity onPress={handleToggleShelf} style={{ marginRight: 4 }}>
-          <Text style={{ fontSize: 24 }}>{saved ? '🔖' : '🏷️'}</Text>
+          <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={22} color={colors.sage} />
         </TouchableOpacity>
       ),
     });
@@ -38,6 +64,14 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
     if (!product) return;
     const added = await toggleShelf(product);
     setSaved(added);
+    if (added) {
+      showToast('Added to your list', {
+        label: 'View Shelf',
+        onPress: () => innerNav.getParent()?.navigate('My Shelf' as never),
+      });
+    } else {
+      showToast('Removed from your shelf');
+    }
   }
 
   if (!product) {
@@ -48,11 +82,12 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
     );
   }
 
-  const meta = CATEGORY_META[product.category] ?? { icon: '📦', bg: '#F5F5F5', color: '#666' };
+  const meta = CATEGORY_META[product.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
   const { comedogenic, irritant } = countFlags(product.ingredients);
   const topDupes = findDupes(product, PRODUCTS).slice(0, 3);
 
   return (
+    <>
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
 
       {/* Hero */}
@@ -60,17 +95,17 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
         {product.imageUrl ? (
           <Image source={{ uri: product.imageUrl }} style={styles.heroImage} resizeMode="contain" />
         ) : (
-          <Text style={styles.heroIcon}>{meta.icon}</Text>
+          <Ionicons name={meta.icon} size={44} color={meta.color} />
         )}
         <View style={styles.heroInfo}>
           <Text style={styles.heroName}>{product.name}</Text>
           <Text style={styles.heroBrand}>{product.brand}</Text>
           <View style={styles.heroMeta}>
-            <View style={[styles.chip, { backgroundColor: '#FFF' }]}>
+            <View style={[styles.chip, { backgroundColor: colors.surface }]}>
               <Text style={[styles.chipText, { color: meta.color }]}>{product.category}</Text>
             </View>
             {product.price > 0 && (
-              <View style={[styles.chip, { backgroundColor: '#FFF' }]}>
+              <View style={[styles.chip, { backgroundColor: colors.surface }]}>
                 <Text style={styles.chipText}>${product.price}</Text>
               </View>
             )}
@@ -79,16 +114,37 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
       </View>
 
       {/* Save-to-shelf CTA */}
-      <TouchableOpacity
+      <PressableScale
         style={[styles.shelfBtn, saved && styles.shelfBtnSaved]}
         onPress={handleToggleShelf}
-        activeOpacity={0.8}
       >
-        <Text style={styles.shelfBtnIcon}>{saved ? '🔖' : '🏷️'}</Text>
+        <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={18} color={saved ? colors.sage : colors.inkSoft} />
         <Text style={[styles.shelfBtnText, saved && styles.shelfBtnTextSaved]}>
           {saved ? 'Saved to My Shelf — tap to remove' : 'Add to My Shelf for conflict checking'}
         </Text>
-      </TouchableOpacity>
+      </PressableScale>
+
+      {/* Price + report */}
+      <View style={styles.priceCard}>
+        <View style={styles.priceLeft}>
+          <Text style={styles.priceNum}>{product.price > 0 ? `$${product.price}` : 'No price data'}</Text>
+          <Text style={styles.priceCaption}>
+            {product.priceUpdatedAt
+              ? `Reported by you · ${formatUpdatedAt(product.priceUpdatedAt)}`
+              : product.price > 0
+                ? 'From our catalog · not independently verified'
+                : "We don't have a price for this one yet"}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.reportBtn}
+          onPress={() => setReportModalOpen(true)}
+          activeOpacity={0.75}
+        >
+          <Ionicons name="pricetag-outline" size={13} color={colors.sage} />
+          <Text style={styles.reportBtnText}>{product.price > 0 ? 'Report a price' : 'Add a price'}</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Ingredient summary */}
       <View style={styles.summaryRow}>
@@ -142,13 +198,11 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
           <Text style={styles.sectionLabel}>Top Alternatives</Text>
           <View style={styles.dupesCard}>
             {topDupes.map((dupe, i) => {
-              const dupeMeta = CATEGORY_META[dupe.product.category] ?? { icon: '📦', bg: '#F5F5F5', color: '#666' };
+              const dupeMeta = CATEGORY_META[dupe.product.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
               const priceDiff = dupe.priceDiff;
               const priceLabel = (product.price === 0 || dupe.product.price === 0)
                 ? 'No price data'
                 : priceDiff === 0 ? 'Same price' : priceDiff > 0 ? `$${priceDiff} more` : `$${Math.abs(priceDiff)} less`;
-              const scoreBg = dupe.score >= 70 ? '#D4F5E2' : dupe.score >= 40 ? '#FFF3CD' : '#FFE0E0';
-              const scoreColor = dupe.score >= 70 ? '#1A6B3C' : dupe.score >= 40 ? '#7A5700' : '#8B1A1A';
               return (
                 <TouchableOpacity
                   key={dupe.product.id}
@@ -157,15 +211,15 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
                   activeOpacity={0.75}
                 >
                   <View style={[styles.dupeIcon, { backgroundColor: dupeMeta.bg }]}>
-                    <Text>{dupeMeta.icon}</Text>
+                    <Ionicons name={dupeMeta.icon} size={18} color={dupeMeta.color} />
                   </View>
                   <View style={styles.dupeInfo}>
                     <Text style={styles.dupeName}>{dupe.product.name}</Text>
                     <Text style={styles.dupeBrand}>{dupe.product.brand} · ${dupe.product.price}</Text>
                     <Text style={styles.dupeStat}>{dupeExplanation(dupe)} · {priceLabel}</Text>
                   </View>
-                  <View style={[styles.scorePill, { backgroundColor: scoreBg }]}>
-                    <Text style={[styles.scorePillNum, { color: scoreColor }]}>{dupe.score}</Text>
+                  <View style={[styles.scorePill, { backgroundColor: scoreBgColor(dupe.score) }]}>
+                    <Text style={[styles.scorePillNum, { color: scoreColor(dupe.score) }]}>{dupe.score}</Text>
                   </View>
                 </TouchableOpacity>
               );
@@ -175,77 +229,175 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
       )}
 
     </ScrollView>
+
+    <ReportPriceModal
+      visible={reportModalOpen}
+      currentPrice={product.price}
+      onSubmit={handleReportPrice}
+      onClose={() => setReportModalOpen(false)}
+    />
+    </>
+  );
+}
+
+function ReportPriceModal({
+  visible,
+  currentPrice,
+  onSubmit,
+  onClose,
+}: {
+  visible: boolean;
+  currentPrice: number;
+  onSubmit: (price: number) => void;
+  onClose: () => void;
+}) {
+  const [input, setInput] = useState('');
+
+  useEffect(() => {
+    if (visible) setInput(currentPrice > 0 ? String(currentPrice) : '');
+  }, [visible, currentPrice]);
+
+  const parsed = parseFloat(input);
+  const valid = !isNaN(parsed) && parsed > 0;
+
+  return (
+    <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
+      <View style={modalStyles.backdrop}>
+        <View style={modalStyles.sheet}>
+          <Text style={modalStyles.title}>What's the current price?</Text>
+          <Text style={modalStyles.subtitle}>
+            This updates the price only on your device — it helps your own cost math stay accurate.
+          </Text>
+          <View style={modalStyles.inputRow}>
+            <Text style={modalStyles.dollarSign}>$</Text>
+            <TextInput
+              style={modalStyles.input}
+              value={input}
+              onChangeText={setInput}
+              placeholder="0.00"
+              placeholderTextColor={colors.inkSoft}
+              keyboardType="decimal-pad"
+              autoFocus
+            />
+          </View>
+          <View style={modalStyles.actions}>
+            <TouchableOpacity style={modalStyles.cancelBtn} onPress={onClose}>
+              <Text style={modalStyles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <PressableScale
+              style={[modalStyles.saveBtn, !valid && modalStyles.saveBtnDisabled]}
+              onPress={() => valid && onSubmit(Math.round(parsed * 100) / 100)}
+              disabled={!valid}
+            >
+              <Text style={modalStyles.saveText}>Save</Text>
+            </PressableScale>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAFAF8' },
+  container: { flex: 1, backgroundColor: colors.paper },
   content: { padding: 16, gap: 16, paddingBottom: 40 },
   notFound: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  notFoundText: { color: '#999', fontSize: 16 },
+  notFoundText: { color: colors.inkSoft, fontSize: 16 },
 
   hero: { borderRadius: 20, padding: 20, flexDirection: 'row', gap: 16, alignItems: 'center' },
-  heroIcon: { fontSize: 48 },
   heroImage: { width: 72, height: 72, borderRadius: 12 },
   heroInfo: { flex: 1, gap: 4 },
-  heroName: { fontSize: 18, fontWeight: '800', color: '#1A1A2E', lineHeight: 24 },
-  heroBrand: { fontSize: 13, color: '#666' },
+  heroName: { ...typography.cardTitle, fontSize: 18, color: colors.ink, lineHeight: 24 },
+  heroBrand: { fontSize: 13, color: colors.inkSoft },
   heroMeta: { flexDirection: 'row', gap: 8, marginTop: 6 },
   chip: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
-  chipText: { fontSize: 12, fontWeight: '600', color: '#555', textTransform: 'capitalize' },
+  chipText: { fontSize: 12, fontWeight: '600', color: colors.inkSoft, textTransform: 'capitalize' },
 
   shelfBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: '#FFF', borderRadius: 14, padding: 14,
-    borderWidth: 1.5, borderColor: '#E5E5E5',
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+    ...cardStyle, padding: 14,
   },
-  shelfBtnSaved: { borderColor: '#C8A2C8', backgroundColor: '#FAF0FA' },
-  shelfBtnIcon: { fontSize: 20 },
-  shelfBtnText: { fontSize: 13, color: '#888', fontWeight: '600', flex: 1 },
-  shelfBtnTextSaved: { color: '#9B59B6' },
+  shelfBtnSaved: { borderColor: colors.sage, backgroundColor: colors.sageSoft },
+  shelfBtnText: { fontSize: 13, color: colors.inkSoft, fontWeight: '600', flex: 1 },
+  shelfBtnTextSaved: { color: colors.sage },
+
+  priceCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    ...cardStyle, padding: 14,
+  },
+  priceLeft: { flex: 1, gap: 2 },
+  priceNum: { fontFamily: fontFamilies.serif, fontSize: 17, fontWeight: '700', color: colors.ink },
+  priceCaption: { fontSize: 11, color: colors.inkSoft },
+  reportBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: colors.sageSoft, borderRadius: 10,
+    paddingHorizontal: 10, paddingVertical: 7,
+  },
+  reportBtnText: { fontSize: 11, fontWeight: '700', color: colors.sage },
 
   summaryRow: { flexDirection: 'row', gap: 10 },
   summaryCard: {
-    flex: 1, backgroundColor: '#FFF', borderRadius: 14, padding: 14,
+    flex: 1, ...cardStyle, padding: 14,
     alignItems: 'center', gap: 2,
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, elevation: 1,
   },
-  summaryWarn: { backgroundColor: '#FFF5F5' },
-  summaryWarnOrange: { backgroundColor: '#FFF8EE' },
-  summaryNum: { fontSize: 24, fontWeight: '800', color: '#1A1A2E' },
-  summaryLabel: { fontSize: 11, color: '#888', fontWeight: '600', textAlign: 'center' },
-  summaryWarnText: { color: '#C0392B' },
-  summaryOrangeText: { color: '#CA6F1E' },
+  summaryWarn: { backgroundColor: colors.claySoft, borderColor: colors.claySoft },
+  summaryWarnOrange: { backgroundColor: colors.goldSoft, borderColor: colors.goldSoft },
+  summaryNum: { fontFamily: fontFamilies.serif, fontSize: 24, fontWeight: '700', color: colors.ink },
+  summaryLabel: { fontSize: 11, color: colors.inkSoft, fontWeight: '600', textAlign: 'center' },
+  summaryWarnText: { color: colors.clay },
+  summaryOrangeText: { color: colors.gold },
 
-  sectionLabel: { fontSize: 12, fontWeight: '700', color: '#AAA', textTransform: 'uppercase', letterSpacing: 0.8 },
+  sectionLabel: { ...typography.eyebrow, color: colors.inkSoft },
 
-  ingredientCard: {
-    backgroundColor: '#FFF', borderRadius: 16, overflow: 'hidden',
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, elevation: 1,
-  },
+  ingredientCard: { ...cardStyle, padding: 0, overflow: 'hidden' },
   ingredientRow: { padding: 14, flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  ingredientBorder: { borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
+  ingredientBorder: { borderBottomWidth: 1, borderBottomColor: colors.line },
   ingLeft: { flex: 1 },
-  ingName: { fontSize: 14, color: '#1A1A2E', fontWeight: '500' },
-  ingNote: { fontSize: 11, color: '#AAA', marginTop: 2, lineHeight: 15 },
+  ingName: { fontSize: 14, color: colors.ink, fontWeight: '500' },
+  ingNote: { fontSize: 11, color: colors.inkSoft, marginTop: 2, lineHeight: 15 },
   flags: { flexDirection: 'row', gap: 6, flexShrink: 0 },
   flag: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  flagRed: { backgroundColor: '#FFE0E0' },
-  flagOrange: { backgroundColor: '#FFF0D0' },
-  flagText: { fontSize: 10, fontWeight: '700', color: '#555' },
+  flagRed: { backgroundColor: colors.claySoft },
+  flagOrange: { backgroundColor: colors.goldSoft },
+  flagText: { fontSize: 10, fontWeight: '700', color: colors.inkSoft },
 
-  dupesCard: {
-    backgroundColor: '#FFF', borderRadius: 16, overflow: 'hidden',
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, elevation: 1,
-  },
+  dupesCard: { ...cardStyle, padding: 0, overflow: 'hidden' },
   dupeRow: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
-  dupeBorder: { borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
+  dupeBorder: { borderBottomWidth: 1, borderBottomColor: colors.line },
   dupeIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   dupeInfo: { flex: 1, gap: 2 },
-  dupeName: { fontSize: 14, fontWeight: '700', color: '#1A1A2E' },
-  dupeBrand: { fontSize: 12, color: '#888' },
-  dupeStat: { fontSize: 11, color: '#AAA', marginTop: 1 },
+  dupeName: { ...typography.cardTitle, color: colors.ink },
+  dupeBrand: { fontSize: 12, color: colors.inkSoft },
+  dupeStat: { fontSize: 11, color: colors.inkSoft, marginTop: 1 },
   scorePill: { borderRadius: 10, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   scorePillNum: { fontSize: 18, fontWeight: '800' },
+});
+
+const modalStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center', justifyContent: 'center', padding: 24,
+  },
+  sheet: {
+    width: '100%', maxWidth: 360, backgroundColor: colors.surface, borderRadius: 20,
+    padding: 22, gap: 14,
+  },
+  title: { ...typography.cardTitle, fontSize: 17, color: colors.ink },
+  subtitle: { fontSize: 12, color: colors.inkSoft, lineHeight: 17, marginTop: -8 },
+  inputRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    borderWidth: 1.5, borderColor: colors.line, borderRadius: 14,
+    paddingHorizontal: 14, paddingVertical: 4,
+  },
+  dollarSign: { fontSize: 20, fontWeight: '700', color: colors.inkSoft },
+  input: { flex: 1, fontSize: 20, fontWeight: '700', color: colors.ink, paddingVertical: 10 },
+  actions: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  cancelBtn: { flex: 1, alignItems: 'center', paddingVertical: 13 },
+  cancelText: { fontSize: 14, fontWeight: '700', color: colors.inkSoft },
+  saveBtn: {
+    flex: 1, backgroundColor: colors.sage, borderRadius: 14,
+    alignItems: 'center', paddingVertical: 13,
+  },
+  saveBtnDisabled: { opacity: 0.4 },
+  saveText: { fontSize: 14, fontWeight: '700', color: colors.surface },
 });

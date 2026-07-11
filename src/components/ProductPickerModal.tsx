@@ -2,20 +2,14 @@ import React, { useState, useEffect } from 'react';
 import {
   Modal, View, Text, TouchableOpacity, FlatList, StyleSheet, SafeAreaView,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Product } from '../types';
 import { PRODUCTS } from '../data/products';
+import { STEP_CATEGORY } from '../data/routines';
 import { getShelf, getShelfProduct } from '../utils/shelfStorage';
 import { getCachedProduct } from '../utils/productCache';
-import { CATEGORY_META } from './ProductCard';
-
-// Maps routine step types to the product category they expect
-export const STEP_CATEGORY: Record<string, Product['category']> = {
-  cleanse:    'cleanser',
-  tone:       'toner',
-  treat:      'serum',
-  moisturize: 'moisturizer',
-  protect:    'sunscreen',
-};
+import { CATEGORY_META, IoniconName } from './ProductCard';
+import { colors, typography, cardStyle } from '../theme';
 
 interface Props {
   visible: boolean;
@@ -65,16 +59,16 @@ export default function ProductPickerModal({ visible, stepType, stepLabel, onSel
             </Text>
           </View>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Text style={styles.closeBtnText}>✕</Text>
+            <Ionicons name="close" size={16} color={colors.inkSoft} />
           </TouchableOpacity>
         </View>
 
         {shelfProducts.length === 0 ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>🔖</Text>
+            <Ionicons name="bookmark-outline" size={44} color={colors.line} />
             <Text style={styles.emptyTitle}>Your shelf is empty</Text>
             <Text style={styles.emptyDesc}>
-              Go to the Ingredients tab, find a product, and tap the bookmark to save it to your shelf first.
+              Go to the Products tab, find a product, and tap the bookmark to save it to your shelf first.
             </Text>
             <TouchableOpacity style={styles.closeActionBtn} onPress={onClose}>
               <Text style={styles.closeActionText}>Got it</Text>
@@ -86,7 +80,7 @@ export default function ProductPickerModal({ visible, stepType, stepLabel, onSel
             keyExtractor={(p) => p.id}
             contentContainerStyle={styles.list}
             renderItem={({ item }) => {
-              const meta = CATEGORY_META[item.category] ?? { icon: '📦', bg: '#F5F5F5', color: '#666' };
+              const meta = CATEGORY_META[item.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
               const isMatch = item.category === expectedCategory;
               return (
                 <TouchableOpacity
@@ -95,7 +89,7 @@ export default function ProductPickerModal({ visible, stepType, stepLabel, onSel
                   activeOpacity={0.75}
                 >
                   <View style={[styles.iconBox, { backgroundColor: meta.bg }]}>
-                    <Text style={styles.icon}>{meta.icon}</Text>
+                    <Ionicons name={meta.icon} size={22} color={meta.color} />
                   </View>
                   <View style={styles.info}>
                     <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
@@ -122,39 +116,35 @@ export default function ProductPickerModal({ visible, stepType, stepLabel, onSel
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAFAF8' },
+  container: { flex: 1, backgroundColor: colors.paper },
 
   header: {
     flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
     padding: 20, paddingBottom: 12,
-    borderBottomWidth: 1, borderBottomColor: '#F0F0F0',
+    borderBottomWidth: 1, borderBottomColor: colors.line,
   },
-  title: { fontSize: 18, fontWeight: '800', color: '#1A1A2E' },
-  subtitle: { fontSize: 12, color: '#AAA', marginTop: 3 },
+  title: { ...typography.cardTitle, fontWeight: '800', color: colors.ink },
+  subtitle: { fontSize: 12, color: colors.inkSoft, marginTop: 3 },
   closeBtn: {
     width: 32, height: 32, borderRadius: 16,
-    backgroundColor: '#F0F0F0', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.line, alignItems: 'center', justifyContent: 'center',
   },
-  closeBtnText: { fontSize: 14, color: '#555', fontWeight: '700' },
 
   list: { padding: 16, gap: 10 },
 
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: '#FFF', borderRadius: 16, padding: 14,
-    borderWidth: 1.5, borderColor: '#EBEBEB',
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, elevation: 1,
+    ...cardStyle, padding: 14,
   },
-  rowMatch: { borderColor: '#C8A2C8' },
+  rowMatch: { borderColor: colors.sage },
 
   iconBox: {
     width: 44, height: 44, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  icon: { fontSize: 22 },
   info: { flex: 1, gap: 2 },
-  name: { fontSize: 14, fontWeight: '700', color: '#1A1A2E' },
-  brand: { fontSize: 12, color: '#888' },
+  name: { ...typography.cardTitle, fontSize: 14, color: colors.ink },
+  brand: { fontSize: 12, color: colors.inkSoft },
   right: { alignItems: 'flex-end', gap: 4 },
   matchChip: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
   matchText: { fontSize: 10, fontWeight: '700' },
@@ -162,12 +152,11 @@ const styles = StyleSheet.create({
   catText: { fontSize: 10, fontWeight: '600', textTransform: 'capitalize' },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, gap: 12 },
-  emptyIcon: { fontSize: 48 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#1A1A2E', textAlign: 'center' },
-  emptyDesc: { fontSize: 14, color: '#AAA', textAlign: 'center', lineHeight: 20 },
+  emptyTitle: { ...typography.cardTitle, color: colors.ink, textAlign: 'center' },
+  emptyDesc: { ...typography.body, color: colors.inkSoft, textAlign: 'center', lineHeight: 20 },
   closeActionBtn: {
-    backgroundColor: '#1A1A2E', borderRadius: 14,
+    backgroundColor: colors.sage, borderRadius: 14,
     paddingHorizontal: 28, paddingVertical: 14, marginTop: 8,
   },
-  closeActionText: { color: '#FFF', fontWeight: '700', fontSize: 15 },
+  closeActionText: { color: colors.surface, fontWeight: '700', fontSize: 15 },
 });

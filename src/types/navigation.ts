@@ -4,10 +4,11 @@ export type OnboardingStackParamList = {
   Welcome: undefined;
   SkinType: undefined;
   Concerns: undefined;
+  Preferences: undefined;
 };
 
 export type AppStackParamList = {
-  Home: undefined;
+  Home: { productId?: string } | undefined;
   ProductDetail: { productId: string };
   ProfileEdit: undefined;
 };

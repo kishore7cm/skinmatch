@@ -4,8 +4,10 @@ import {
   ScrollView, ActivityIndicator, Platform,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Ionicons } from '@expo/vector-icons';
 import { extractIngredientsFromImage } from '../api/claudeVision';
 import { getIngredientFlag, countFlags } from '../utils/ingredientUtils';
+import { colors, typography, cardStyle } from '../theme';
 
 // Inline ingredient parser (same logic as productMapper, kept local to avoid circular deps)
 function parseIngredients(raw: string): string[] {
@@ -86,7 +88,7 @@ export default function IngredientScanner({ visible, onClose }: Props) {
     return (
       <Modal visible={visible} animationType="slide" onRequestClose={handleClose}>
         <SafeAreaView style={styles.center}>
-          <Text style={styles.unsupportedIcon}>📸</Text>
+          <Ionicons name="camera-outline" size={52} color={colors.inkSoft} />
           <Text style={styles.title}>Requires iOS or Android</Text>
           <Text style={styles.subtitle}>Camera scanning isn't available in the web preview.</Text>
           <TouchableOpacity style={styles.primaryBtn} onPress={handleClose}>
@@ -137,7 +139,7 @@ export default function IngredientScanner({ visible, onClose }: Props) {
                 {/* Header */}
                 <View style={styles.cameraHeader}>
                   <TouchableOpacity style={styles.closeIconBtn} onPress={handleClose}>
-                    <Text style={styles.closeIcon}>✕</Text>
+                    <Ionicons name="close" size={16} color={colors.surface} />
                   </TouchableOpacity>
                   <Text style={styles.cameraTitle}>Scan Ingredients</Text>
                 </View>
@@ -159,7 +161,7 @@ export default function IngredientScanner({ visible, onClose }: Props) {
         {/* ── Processing ── */}
         {screen === 'processing' && (
           <View style={styles.center}>
-            <ActivityIndicator size="large" color="#C8A2C8" />
+            <ActivityIndicator size="large" color={colors.sage} />
             <Text style={styles.title}>Reading ingredients…</Text>
             <Text style={styles.subtitle}>Claude is analysing your photo</Text>
           </View>
@@ -168,7 +170,7 @@ export default function IngredientScanner({ visible, onClose }: Props) {
         {/* ── Error ── */}
         {screen === 'error' && (
           <View style={styles.center}>
-            <Text style={styles.bigIcon}>😕</Text>
+            <Ionicons name="sad-outline" size={52} color={colors.inkSoft} />
             <Text style={styles.title}>Couldn't read ingredients</Text>
             <Text style={styles.subtitle}>{errorMsg}</Text>
             <TouchableOpacity style={styles.primaryBtn} onPress={() => setScreen('camera')}>
@@ -189,7 +191,7 @@ export default function IngredientScanner({ visible, onClose }: Props) {
                 <Text style={styles.subtitle}>{ingredients.length} ingredients detected</Text>
               </View>
               <TouchableOpacity style={styles.closeIconBtn} onPress={handleClose}>
-                <Text style={styles.closeIcon}>✕</Text>
+                <Ionicons name="close" size={16} color={colors.surface} />
               </TouchableOpacity>
             </View>
 
@@ -229,7 +231,8 @@ export default function IngredientScanner({ visible, onClose }: Props) {
                 style={styles.scanAgainBtn}
                 onPress={() => { setIngredients([]); setScreen('camera'); }}
               >
-                <Text style={styles.scanAgainText}>📸 Scan another product</Text>
+                <Ionicons name="camera-outline" size={15} color={colors.sage} />
+                <Text style={styles.scanAgainText}>Scan another product</Text>
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -250,16 +253,16 @@ function ResultsSummary({ ingredients }: { ingredients: string[] }) {
         <Text style={styles.summaryLabel}>Total</Text>
       </View>
       <View style={[styles.summaryCard, comedogenic > 0 && styles.summaryRed]}>
-        <Text style={[styles.summaryNum, comedogenic > 0 && { color: '#C0392B' }]}>{comedogenic}</Text>
-        <Text style={[styles.summaryLabel, comedogenic > 0 && { color: '#C0392B' }]}>Pore-clogging</Text>
+        <Text style={[styles.summaryNum, comedogenic > 0 && { color: colors.clay }]}>{comedogenic}</Text>
+        <Text style={[styles.summaryLabel, comedogenic > 0 && { color: colors.clay }]}>Pore-clogging</Text>
       </View>
       <View style={[styles.summaryCard, irritant > 0 && styles.summaryOrange]}>
-        <Text style={[styles.summaryNum, irritant > 0 && { color: '#CA6F1E' }]}>{irritant}</Text>
-        <Text style={[styles.summaryLabel, irritant > 0 && { color: '#CA6F1E' }]}>Irritants</Text>
+        <Text style={[styles.summaryNum, irritant > 0 && { color: colors.gold }]}>{irritant}</Text>
+        <Text style={[styles.summaryLabel, irritant > 0 && { color: colors.gold }]}>Irritants</Text>
       </View>
       <View style={[styles.summaryCard, styles.summaryGreen]}>
-        <Text style={[styles.summaryNum, { color: '#1E8449' }]}>{clean}</Text>
-        <Text style={[styles.summaryLabel, { color: '#1E8449' }]}>Clean</Text>
+        <Text style={[styles.summaryNum, { color: colors.sage }]}>{clean}</Text>
+        <Text style={[styles.summaryLabel, { color: colors.sage }]}>Clean</Text>
       </View>
     </View>
   );
@@ -270,24 +273,23 @@ const CORNER_W = 3;
 const SCAN_H = 200;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAFAF8' },
+  container: { flex: 1, backgroundColor: colors.paper },
   center: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
-    padding: 32, gap: 14, backgroundColor: '#FAFAF8',
+    padding: 32, gap: 14, backgroundColor: colors.paper,
   },
 
-  bigIcon: { fontSize: 52 },
-  title: { fontSize: 20, fontWeight: '800', color: '#1A1A2E', textAlign: 'center' },
-  subtitle: { fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 20 },
-  cancelText: { fontSize: 14, color: '#AAA' },
-  errorText: { fontSize: 13, color: '#C0392B', textAlign: 'center' },
+  title: { fontSize: 20, fontWeight: '800', color: colors.ink, textAlign: 'center' },
+  subtitle: { fontSize: 14, color: colors.inkSoft, textAlign: 'center', lineHeight: 20 },
+  cancelText: { fontSize: 14, color: colors.inkSoft },
+  errorText: { fontSize: 13, color: colors.clay, textAlign: 'center' },
 
   primaryBtn: {
-    backgroundColor: '#C8A2C8', borderRadius: 14,
+    backgroundColor: colors.sage, borderRadius: 14,
     paddingHorizontal: 28, paddingVertical: 14, width: '100%', alignItems: 'center',
   },
   primaryBtnDisabled: { opacity: 0.4 },
-  primaryBtnText: { color: '#FFF', fontWeight: '700', fontSize: 15 },
+  primaryBtnText: { color: colors.surface, fontWeight: '700', fontSize: 15 },
 
   // Camera
   cameraOverlay: { ...StyleSheet.absoluteFill },
@@ -296,7 +298,7 @@ const styles = StyleSheet.create({
   overlaySide: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
   overlayBottom: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
   scanWindow: { width: 300, height: SCAN_H },
-  corner: { position: 'absolute', width: CORNER, height: CORNER, borderColor: '#C8A2C8' },
+  corner: { position: 'absolute', width: CORNER, height: CORNER, borderColor: colors.sage },
   cornerTL: { top: 0, left: 0, borderTopWidth: CORNER_W, borderLeftWidth: CORNER_W },
   cornerTR: { top: 0, right: 0, borderTopWidth: CORNER_W, borderRightWidth: CORNER_W },
   cornerBL: { bottom: 0, left: 0, borderBottomWidth: CORNER_W, borderLeftWidth: CORNER_W },
@@ -311,8 +313,7 @@ const styles = StyleSheet.create({
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center',
   },
-  closeIcon: { color: '#FFF', fontSize: 16, fontWeight: '700' },
-  cameraTitle: { fontSize: 18, fontWeight: '700', color: '#FFF' },
+  cameraTitle: { fontSize: 18, fontWeight: '700', color: colors.surface },
 
   cameraFooter: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
@@ -321,50 +322,49 @@ const styles = StyleSheet.create({
   cameraHint: { color: 'rgba(255,255,255,0.8)', fontSize: 13, textAlign: 'center', paddingHorizontal: 40 },
   captureBtn: {
     width: 72, height: 72, borderRadius: 36,
-    borderWidth: 4, borderColor: '#FFF',
+    borderWidth: 4, borderColor: colors.surface,
     alignItems: 'center', justifyContent: 'center',
   },
   captureInner: {
-    width: 56, height: 56, borderRadius: 28, backgroundColor: '#FFF',
+    width: 56, height: 56, borderRadius: 28, backgroundColor: colors.surface,
   },
 
   // Results
   resultsHeader: {
     flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
-    padding: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F0F0F0',
+    padding: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.line,
   },
 
   summaryRow: { flexDirection: 'row', gap: 8, padding: 16, paddingBottom: 8 },
   summaryCard: {
-    flex: 1, backgroundColor: '#FFF', borderRadius: 12, padding: 10,
+    flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 10,
     alignItems: 'center', gap: 2,
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+    borderWidth: 1, borderColor: colors.line,
   },
-  summaryRed: { backgroundColor: '#FFF5F5' },
-  summaryOrange: { backgroundColor: '#FFF8EE' },
-  summaryGreen: { backgroundColor: '#F0FBF4' },
-  summaryNum: { fontSize: 20, fontWeight: '800', color: '#1A1A2E' },
-  summaryLabel: { fontSize: 9, fontWeight: '600', color: '#888', textAlign: 'center' },
+  summaryRed: { backgroundColor: colors.claySoft },
+  summaryOrange: { backgroundColor: colors.goldSoft },
+  summaryGreen: { backgroundColor: colors.sageSoft },
+  summaryNum: { fontSize: 20, fontWeight: '800', color: colors.ink },
+  summaryLabel: { fontSize: 9, fontWeight: '600', color: colors.inkSoft, textAlign: 'center' },
 
   resultsList: { padding: 16, paddingTop: 8, paddingBottom: 40 },
   ingredientRow: {
     paddingVertical: 12, flexDirection: 'row', alignItems: 'flex-start', gap: 10,
   },
-  ingredientBorder: { borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
+  ingredientBorder: { borderBottomWidth: 1, borderBottomColor: colors.line },
   ingLeft: { flex: 1 },
-  ingName: { fontSize: 14, color: '#1A1A2E', fontWeight: '500' },
-  ingNote: { fontSize: 11, color: '#AAA', marginTop: 2, lineHeight: 15 },
+  ingName: { fontSize: 14, color: colors.ink, fontWeight: '500' },
+  ingNote: { fontSize: 11, color: colors.inkSoft, marginTop: 2, lineHeight: 15 },
   flags: { flexDirection: 'row', gap: 6, flexShrink: 0 },
   flag: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  flagRed: { backgroundColor: '#FFE0E0' },
-  flagOrange: { backgroundColor: '#FFF0D0' },
-  flagText: { fontSize: 10, fontWeight: '700', color: '#555' },
-
-  unsupportedIcon: { fontSize: 52 },
+  flagRed: { backgroundColor: colors.claySoft },
+  flagOrange: { backgroundColor: colors.goldSoft },
+  flagText: { fontSize: 10, fontWeight: '700', color: colors.inkSoft },
 
   scanAgainBtn: {
-    marginTop: 24, backgroundColor: '#F0E6FF', borderRadius: 14,
-    paddingVertical: 14, alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    marginTop: 24, backgroundColor: colors.sageSoft, borderRadius: 14,
+    paddingVertical: 14,
   },
-  scanAgainText: { fontSize: 14, fontWeight: '700', color: '#9B59B6' },
+  scanAgainText: { fontSize: 14, fontWeight: '700', color: colors.sage },
 });

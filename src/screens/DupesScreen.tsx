@@ -3,19 +3,24 @@ import {
   View, Text, FlatList, TouchableOpacity, StyleSheet, SafeAreaView,
   ScrollView, TextInput, ActivityIndicator,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { PRODUCTS } from '../data/products';
 import { findDupes, dupeExplanation, DupeResult } from '../utils/matching';
 import { AppStackParamList } from '../types/navigation';
-import ProductCard, { CATEGORY_META } from '../components/ProductCard';
+import ProductCard, { CATEGORY_META, IoniconName } from '../components/ProductCard';
 import { Product } from '../types';
 import { searchBeautyProducts } from '../api/openBeautyFacts';
 import { mapOBFProducts } from '../utils/productMapper';
-import { cacheProducts } from '../utils/productCache';
+import { cacheProducts, getCachedProduct } from '../utils/productCache';
+import { getShelfProduct } from '../utils/shelfStorage';
 import BarcodeScanner from '../components/BarcodeScanner';
+import EmptyState from '../components/EmptyState';
+import { colors, typography, cardStyle } from '../theme';
 
 type Nav = NativeStackNavigationProp<AppStackParamList>;
+type Route = RouteProp<AppStackParamList, 'Home'>;
 type Category = 'all' | Product['category'];
 
 const CATEGORIES: Category[] = ['all', 'cleanser', 'toner', 'serum', 'moisturizer', 'sunscreen'];
@@ -28,10 +33,30 @@ export default function DupesScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const navigation = useNavigation<Nav>();
+  const route = useRoute<Route>();
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isApiMode = query.length >= 3;
+
+  // Preselect a product when arriving with explicit context (e.g. "Find a
+  // gentler alternative" from a Shelf conflict card).
+  useEffect(() => {
+    const productId = route.params?.productId;
+    if (!productId) return;
+    (async () => {
+      const product =
+        PRODUCTS.find((p) => p.id === productId) ??
+        getCachedProduct(productId) ??
+        (await getShelfProduct(productId));
+      if (!product) return;
+      if (!PRODUCTS.some((p) => p.id === product.id)) {
+        cacheProducts([product]);
+        setApiProducts((prev) => (prev.some((p) => p.id === product.id) ? prev : [product, ...prev]));
+      }
+      setSelected(product);
+    })();
+  }, [route.params?.productId]);
 
   useEffect(() => {
     if (!isApiMode) {
@@ -107,21 +132,21 @@ export default function DupesScreen() {
 
       {/* Search */}
       <View style={styles.searchBar}>
-        <Text style={styles.searchIcon}>🔍</Text>
+        <Ionicons name="search-outline" size={16} color={colors.inkSoft} style={styles.searchIcon} />
         <TextInput
           style={styles.input}
           placeholder="Search any product or brand..."
-          placeholderTextColor="#BBB"
+          placeholderTextColor={colors.inkSoft}
           value={query}
           onChangeText={(t) => { setQuery(t); setSelected(null); }}
           clearButtonMode="while-editing"
           autoCorrect={false}
         />
         {isLoading
-          ? <ActivityIndicator size="small" color="#C8A2C8" style={{ marginLeft: 6 }} />
+          ? <ActivityIndicator size="small" color={colors.sage} style={{ marginLeft: 6 }} />
           : (
             <TouchableOpacity onPress={() => setScannerOpen(true)} style={styles.scanBtn}>
-              <Text style={styles.scanIcon}>📷</Text>
+              <Ionicons name="camera-outline" size={20} color={colors.sage} />
             </TouchableOpacity>
           )
         }
@@ -161,7 +186,7 @@ export default function DupesScreen() {
                 ]}
                 onPress={() => { setCategory(cat); setSelected(null); }}
               >
-                {meta && <Text style={styles.filterChipIcon}>{meta.icon}</Text>}
+                {meta && <Ionicons name={meta.icon} size={13} color={isActive ? meta.color : colors.inkSoft} style={styles.filterChipIcon} />}
                 <Text style={[
                   styles.filterChipText,
                   isActive && (meta ? { color: meta.color } : styles.filterChipTextAll),
@@ -187,7 +212,7 @@ export default function DupesScreen() {
           contentContainerStyle={styles.pickerRow}
         >
           {pickerProducts.map((p) => {
-            const meta = CATEGORY_META[p.category] ?? { icon: '📦', bg: '#F5F5F5', color: '#666' };
+            const meta = CATEGORY_META[p.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
             const isActive = selected?.id === p.id;
             const hasIngredients = p.ingredients.length >= 2;
             return (
@@ -195,14 +220,14 @@ export default function DupesScreen() {
                 key={p.id}
                 style={[
                   styles.pickerChip,
-                  { borderColor: hasIngredients ? meta.color : '#DDD' },
-                  isActive && { backgroundColor: '#C8A2C8', borderColor: '#C8A2C8' },
+                  { borderColor: hasIngredients ? meta.color : colors.line },
+                  isActive && { backgroundColor: colors.sage, borderColor: colors.sage },
                   !hasIngredients && styles.pickerChipNoData,
                 ]}
                 onPress={() => hasIngredients && setSelected(isActive ? null : p)}
                 activeOpacity={hasIngredients ? 0.75 : 1}
               >
-                <Text style={styles.pickerIcon}>{meta.icon}</Text>
+                <Ionicons name={meta.icon} size={17} color={isActive ? colors.surface : meta.color} style={styles.pickerIcon} />
                 <Text style={[styles.pickerName, isActive && styles.pickerNameActive, !hasIngredients && styles.pickerNameDim]} numberOfLines={2}>
                   {p.name}
                 </Text>
@@ -235,7 +260,7 @@ export default function DupesScreen() {
               {' · '}{selected.ingredients.length} ingredients
             </Text>
           </View>
-          <Text style={styles.sourceArrow}>›</Text>
+          <Ionicons name="chevron-forward" size={22} color={colors.sage} />
         </TouchableOpacity>
       )}
 
@@ -251,13 +276,11 @@ export default function DupesScreen() {
             </Text>
           }
           ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyIcon}>🤷</Text>
-              <Text style={styles.emptyTitle}>No alternatives found</Text>
-              <Text style={styles.emptyDesc}>
-                Search for more products in the same category to compare against.
-              </Text>
-            </View>
+            <EmptyState
+              icon="help-circle-outline"
+              title="No alternatives found"
+              description="Search for more products in the same category to compare against."
+            />
           }
           renderItem={({ item }) => (
             <ProductCard
@@ -269,100 +292,90 @@ export default function DupesScreen() {
             />
           )}
         />
-      ) : (
+      ) : isLoading ? (
         <View style={styles.emptyState}>
-          {isLoading ? (
-            <>
-              <ActivityIndicator size="large" color="#C8A2C8" />
-              <Text style={styles.emptyDesc}>Searching Open Beauty Facts…</Text>
-            </>
-          ) : pickerProducts.length === 0 ? (
-            <>
-              <Text style={styles.emptyIcon}>🔍</Text>
-              <Text style={styles.emptyTitle}>No products found</Text>
-              <Text style={styles.emptyDesc}>Try a different search or category.</Text>
-            </>
-          ) : (
-            <>
-              <Text style={styles.emptyIcon}>🔄</Text>
-              <Text style={styles.emptyTitle}>Pick a product to compare</Text>
-              <Text style={styles.emptyDesc}>
-                {isApiMode
-                  ? 'Tap a product in the strip above to find its closest ingredient matches.'
-                  : 'Search or filter above, then tap a product in the strip to find its best-matched alternatives.'}
-              </Text>
-            </>
-          )}
+          <ActivityIndicator size="large" color={colors.sage} />
+          <Text style={styles.emptyDesc}>Searching Open Beauty Facts…</Text>
         </View>
+      ) : pickerProducts.length === 0 ? (
+        <EmptyState
+          icon="search-outline"
+          title="No products found"
+          description="Try a different search or category."
+        />
+      ) : (
+        <EmptyState
+          icon="swap-horizontal-outline"
+          title="Pick a product to compare"
+          description={
+            isApiMode
+              ? 'Tap a product in the strip above to find its closest ingredient matches.'
+              : 'Search or filter above, then tap a product in the strip to find its best-matched alternatives.'
+          }
+        />
       )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAFAF8' },
+  container: { flex: 1, backgroundColor: colors.paper },
 
   topBar: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
-  title: { fontSize: 26, fontWeight: '800', color: '#1A1A2E', letterSpacing: -0.5 },
-  subtitle: { fontSize: 12, color: '#AAA', marginTop: 2 },
+  title: { ...typography.screenTitle, color: colors.ink },
+  subtitle: { fontSize: 12, color: colors.inkSoft, marginTop: 2 },
 
   searchBar: {
     flexDirection: 'row', alignItems: 'center',
     marginHorizontal: 16, marginBottom: 10,
-    backgroundColor: '#FFF', borderRadius: 14,
-    paddingHorizontal: 12, borderWidth: 1, borderColor: '#EBEBEB',
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+    backgroundColor: colors.surface, borderRadius: 14,
+    paddingHorizontal: 12, borderWidth: 1, borderColor: colors.line,
   },
-  searchIcon: { fontSize: 16, marginRight: 8 },
-  input: { flex: 1, paddingVertical: 13, fontSize: 15, color: '#333' },
+  searchIcon: { marginRight: 8 },
+  input: { flex: 1, paddingVertical: 13, fontSize: 15, color: colors.ink },
   scanBtn: { padding: 4, marginLeft: 4 },
-  scanIcon: { fontSize: 20 },
 
   filterRow: { paddingHorizontal: 16, paddingBottom: 10, gap: 8 },
   filterChip: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 12, paddingVertical: 7,
-    borderRadius: 20, borderWidth: 1.5, borderColor: '#E5E5E5', backgroundColor: '#FFF',
+    borderRadius: 20, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.surface,
   },
-  filterChipActiveAll: { backgroundColor: '#F0E6FF', borderColor: '#C8A2C8' },
-  filterChipIcon: { fontSize: 13 },
-  filterChipText: { fontSize: 12, fontWeight: '600', color: '#999' },
-  filterChipTextAll: { color: '#9B59B6' },
+  filterChipActiveAll: { backgroundColor: colors.sageSoft, borderColor: colors.sage },
+  filterChipIcon: {},
+  filterChipText: { fontSize: 12, fontWeight: '600', color: colors.inkSoft },
+  filterChipTextAll: { color: colors.sage },
 
-  apiLabel: { fontSize: 12, color: '#BBB', fontWeight: '600', paddingHorizontal: 16, marginBottom: 6 },
+  apiLabel: { fontSize: 12, color: colors.inkSoft, fontWeight: '600', paddingHorizontal: 16, marginBottom: 6 },
 
   pickerRow: { paddingHorizontal: 16, paddingBottom: 10, gap: 10 },
   pickerChip: {
     borderWidth: 1.5, borderRadius: 14, padding: 12, width: 140,
-    backgroundColor: '#FFF', gap: 3,
+    backgroundColor: colors.surface, gap: 3,
   },
-  pickerIcon: { fontSize: 18 },
-  pickerName: { fontSize: 12, fontWeight: '700', color: '#1A1A2E', lineHeight: 16 },
-  pickerNameActive: { color: '#FFF' },
-  pickerBrand: { fontSize: 11, color: '#AAA' },
+  pickerIcon: { marginBottom: 2 },
+  pickerName: { ...typography.cardTitle, fontSize: 12, color: colors.ink, lineHeight: 16 },
+  pickerNameActive: { color: colors.surface },
+  pickerBrand: { fontSize: 11, color: colors.inkSoft },
   pickerBrandActive: { color: 'rgba(255,255,255,0.8)' },
   pickerChipNoData: { opacity: 0.5 },
-  pickerNameDim: { color: '#999' },
-  pickerNoData: { fontSize: 10, color: '#BBB', fontStyle: 'italic' },
+  pickerNameDim: { color: colors.inkSoft },
+  pickerNoData: { fontSize: 10, color: colors.inkSoft, fontStyle: 'italic' },
 
   sourceCard: {
     marginHorizontal: 16, marginBottom: 8,
-    backgroundColor: '#FFF', borderRadius: 16, padding: 14,
+    ...cardStyle, padding: 14,
     flexDirection: 'row', alignItems: 'center',
-    borderLeftWidth: 4, borderLeftColor: '#C8A2C8',
-    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, elevation: 1,
+    borderLeftWidth: 4, borderLeftColor: colors.sage,
   },
   sourceLeft: { flex: 1 },
-  sourceLabel: { fontSize: 10, fontWeight: '700', color: '#C8A2C8', textTransform: 'uppercase', marginBottom: 2 },
-  sourceName: { fontSize: 15, fontWeight: '700', color: '#1A1A2E' },
-  sourceMeta: { fontSize: 12, color: '#888', marginTop: 2 },
-  sourceArrow: { fontSize: 24, color: '#C8A2C8', fontWeight: '300' },
+  sourceLabel: { ...typography.eyebrow, fontSize: 10, color: colors.sage, marginBottom: 2 },
+  sourceName: { ...typography.cardTitle, color: colors.ink },
+  sourceMeta: { fontSize: 12, color: colors.inkSoft, marginTop: 2 },
 
-  resultsLabel: { fontSize: 12, fontWeight: '600', color: '#AAA', marginBottom: 10 },
+  resultsLabel: { fontSize: 12, fontWeight: '600', color: colors.inkSoft, marginBottom: 10 },
   list: { paddingHorizontal: 16, paddingBottom: 30, gap: 10 },
 
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 10 },
-  emptyIcon: { fontSize: 44 },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#1A1A2E', textAlign: 'center' },
-  emptyDesc: { fontSize: 14, color: '#AAA', textAlign: 'center', lineHeight: 20 },
+  emptyDesc: { ...typography.body, color: colors.inkSoft, textAlign: 'center', lineHeight: 20 },
 });

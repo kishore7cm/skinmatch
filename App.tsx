@@ -4,7 +4,10 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
+import type { IoniconName } from './src/components/ProductCard';
 
+import HomeScreen from './src/screens/HomeScreen';
 import RoutineScreen from './src/screens/RoutineScreen';
 import IngredientsScreen from './src/screens/IngredientsScreen';
 import DupesScreen from './src/screens/DupesScreen';
@@ -14,24 +17,28 @@ import ProfileEditScreen from './src/screens/ProfileEditScreen';
 import OnboardingWelcome from './src/screens/onboarding/OnboardingWelcome';
 import OnboardingSkinType from './src/screens/onboarding/OnboardingSkinType';
 import OnboardingConcerns from './src/screens/onboarding/OnboardingConcerns';
+import OnboardingPreferences from './src/screens/onboarding/OnboardingPreferences';
 
 import { getProfile } from './src/utils/profileStorage';
 import { OnboardingContext } from './src/context/OnboardingContext';
 import { AppStackParamList, OnboardingStackParamList } from './src/types/navigation';
+import { colors, typography } from './src/theme';
+import { ToastProvider } from './src/context/ToastContext';
 
 // ── Stack navigators ──────────────────────────────────────────────────────────
 const OnboardingStack  = createNativeStackNavigator<OnboardingStackParamList>();
+const HomeStack        = createNativeStackNavigator<AppStackParamList>();
 const RoutineStack     = createNativeStackNavigator<AppStackParamList>();
 const IngredientsStack = createNativeStackNavigator<AppStackParamList>();
 const DupesStack       = createNativeStackNavigator<AppStackParamList>();
 const ShelfStack       = createNativeStackNavigator<AppStackParamList>();
 
 const STACK_OPTIONS = {
-  headerStyle: { backgroundColor: '#FAFAF8' },
-  headerTintColor: '#C8A2C8',
-  headerTitleStyle: { color: '#1A1A2E', fontWeight: '700' as const, fontSize: 17 },
+  headerStyle: { backgroundColor: colors.paper },
+  headerTintColor: colors.sage,
+  headerTitleStyle: { color: colors.ink, fontWeight: '700' as const, fontSize: 17 },
   headerShadowVisible: false,
-  contentStyle: { backgroundColor: '#FAFAF8' },
+  contentStyle: { backgroundColor: colors.paper },
 };
 
 function OnboardingNavigator({ onComplete }: { onComplete: () => void }) {
@@ -41,8 +48,19 @@ function OnboardingNavigator({ onComplete }: { onComplete: () => void }) {
         <OnboardingStack.Screen name="Welcome"  component={OnboardingWelcome} />
         <OnboardingStack.Screen name="SkinType" component={OnboardingSkinType} />
         <OnboardingStack.Screen name="Concerns" component={OnboardingConcerns} />
+        <OnboardingStack.Screen name="Preferences" component={OnboardingPreferences} />
       </OnboardingStack.Navigator>
     </OnboardingContext.Provider>
+  );
+}
+
+function HomeNavigator() {
+  return (
+    <HomeStack.Navigator screenOptions={STACK_OPTIONS}>
+      <HomeStack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
+      <HomeStack.Screen name="ProductDetail" component={ProductDetailScreen} />
+      <HomeStack.Screen name="ProfileEdit" component={ProfileEditScreen} options={{ title: 'Edit Profile' }} />
+    </HomeStack.Navigator>
   );
 }
 
@@ -89,11 +107,12 @@ function ShelfNavigator() {
 // ── Tab navigator ─────────────────────────────────────────────────────────────
 const Tab = createBottomTabNavigator();
 
-const TAB_META: Record<string, string> = {
-  Routine:     '📋',
-  Ingredients: '🧪',
-  Dupes:       '🔄',
-  'My Shelf':  '🔖',
+const TAB_META: Record<string, IoniconName> = {
+  Home:        'home',
+  Routine:     'clipboard',
+  Ingredients: 'flask',
+  Dupes:       'swap-horizontal',
+  'My Shelf':  'bookmark',
 };
 
 function MainTabs() {
@@ -101,22 +120,27 @@ function MainTabs() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarIcon: ({ focused }) => (
+        tabBarIcon: ({ focused, color }) => (
           <View style={{ alignItems: 'center' }}>
-            <Text style={{ fontSize: 21 }}>{TAB_META[route.name]}</Text>
+            <Ionicons
+              name={focused ? TAB_META[route.name] : (`${TAB_META[route.name]}-outline` as IoniconName)}
+              size={22}
+              color={color}
+            />
             {focused && (
               <View style={tabStyles.activeDot} />
             )}
           </View>
         ),
-        tabBarActiveTintColor: '#C8A2C8',
-        tabBarInactiveTintColor: '#BBB',
+        tabBarActiveTintColor: colors.sage,
+        tabBarInactiveTintColor: colors.inkSoft,
         tabBarStyle: tabStyles.tabBar,
         tabBarLabelStyle: tabStyles.tabLabel,
       })}
     >
+      <Tab.Screen name="Home"        component={HomeNavigator} />
       <Tab.Screen name="Routine"     component={RoutineNavigator} />
-      <Tab.Screen name="Ingredients" component={IngredientsNavigator} />
+      <Tab.Screen name="Ingredients" component={IngredientsNavigator} options={{ tabBarLabel: 'Products' }} />
       <Tab.Screen name="Dupes"       component={DupesNavigator} />
       <Tab.Screen name="My Shelf"    component={ShelfNavigator} />
     </Tab.Navigator>
@@ -125,11 +149,11 @@ function MainTabs() {
 
 const tabStyles = StyleSheet.create({
   tabBar: {
-    backgroundColor: '#FFF', borderTopColor: '#F0F0F0',
-    borderTopWidth: 1, height: 64, paddingBottom: 10, paddingTop: 6,
+    backgroundColor: colors.surface, borderTopColor: colors.line,
+    borderTopWidth: 1, height: 68, paddingBottom: 10, paddingTop: 6,
   },
-  tabLabel: { fontSize: 10, fontWeight: '600' },
-  activeDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#C8A2C8', marginTop: 2 },
+  tabLabel: { fontSize: 12, fontWeight: '600' },
+  activeDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.sage, marginTop: 2 },
 });
 
 // ── Root app with onboarding gate ─────────────────────────────────────────────
@@ -144,14 +168,14 @@ export default function App() {
     return (
       <View style={appStyles.splash}>
         <StatusBar style="dark" />
-        <Text style={appStyles.splashEmoji}>✨</Text>
+        <Ionicons name="sparkles" size={44} color={colors.sage} />
         <Text style={appStyles.splashName}>SkinMatch</Text>
       </View>
     );
   }
 
   return (
-    <>
+    <ToastProvider>
       <StatusBar style="dark" />
       <NavigationContainer>
         {isOnboarded ? (
@@ -160,15 +184,14 @@ export default function App() {
           <OnboardingNavigator onComplete={() => setIsOnboarded(true)} />
         )}
       </NavigationContainer>
-    </>
+    </ToastProvider>
   );
 }
 
 const appStyles = StyleSheet.create({
   splash: {
-    flex: 1, backgroundColor: '#FAFAF8',
+    flex: 1, backgroundColor: colors.paper,
     alignItems: 'center', justifyContent: 'center', gap: 8,
   },
-  splashEmoji: { fontSize: 56 },
-  splashName: { fontSize: 28, fontWeight: '800', color: '#1A1A2E', letterSpacing: -0.5 },
+  splashName: { ...typography.screenTitle, color: colors.ink },
 });

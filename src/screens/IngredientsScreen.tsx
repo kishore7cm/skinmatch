@@ -5,17 +5,20 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import BarcodeScanner from '../components/BarcodeScanner';
 import IngredientScanner from '../components/IngredientScanner';
 import { PRODUCTS } from '../data/products';
 import { AppStackParamList } from '../types/navigation';
-import { CATEGORY_META } from '../components/ProductCard';
+import { CATEGORY_META, IoniconName } from '../components/ProductCard';
 import ProductCard from '../components/ProductCard';
 import { countFlags } from '../utils/ingredientUtils';
 import { Product } from '../types';
 import { searchBeautyProducts } from '../api/openBeautyFacts';
 import { mapOBFProducts } from '../utils/productMapper';
 import { cacheProducts } from '../utils/productCache';
+import { colors, typography, cardStyle } from '../theme';
+import EmptyState from '../components/EmptyState';
 
 type Nav = NativeStackNavigationProp<AppStackParamList>;
 type Category = 'all' | Product['category'];
@@ -131,31 +134,31 @@ export default function IngredientsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
-        <Text style={styles.title}>Ingredients</Text>
+        <Text style={styles.title}>Products</Text>
         <Text style={styles.subtitle}>Tap any product to see its full analysis</Text>
       </View>
 
       {/* Search */}
       <View style={styles.searchBar}>
-        <Text style={styles.searchIcon}>🔍</Text>
+        <Ionicons name="search-outline" size={16} color={colors.inkSoft} style={styles.searchIcon} />
         <TextInput
           style={styles.input}
           placeholder="Search any product or brand..."
-          placeholderTextColor="#BBB"
+          placeholderTextColor={colors.inkSoft}
           value={query}
           onChangeText={setQuery}
           clearButtonMode="while-editing"
           autoCorrect={false}
         />
         {isLoading
-          ? <ActivityIndicator size="small" color="#C8A2C8" style={{ marginLeft: 6 }} />
+          ? <ActivityIndicator size="small" color={colors.sage} style={{ marginLeft: 6 }} />
           : (
             <View style={styles.scanBtns}>
               <TouchableOpacity onPress={() => setScannerOpen(true)} style={styles.scanBtn}>
-                <Text style={styles.scanIcon}>📷</Text>
+                <Ionicons name="camera-outline" size={20} color={colors.sage} />
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setIngredientScannerOpen(true)} style={styles.scanBtn}>
-                <Text style={styles.scanIcon}>🔬</Text>
+                <Ionicons name="flask-outline" size={20} color={colors.sage} />
               </TouchableOpacity>
             </View>
           )
@@ -175,10 +178,15 @@ export default function IngredientsScreen() {
         onClose={() => { setIngredientScannerOpen(false); setNoDataProduct(null); }}
       />
 
-      {/* Category filter + sort row — hidden in API mode */}
+      {/* Category filter + sort — hidden in API mode */}
       {!isApiMode && (
-        <View style={styles.filterRow}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+        <>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chipsScroll}
+            contentContainerStyle={styles.chips}
+          >
             {CATEGORIES.map((cat) => {
               const isActive = category === cat;
               const meta = cat !== 'all' ? CATEGORY_META[cat] : null;
@@ -188,7 +196,7 @@ export default function IngredientsScreen() {
                   style={[styles.chip, isActive && (meta ? { backgroundColor: meta.bg, borderColor: meta.color } : styles.chipActiveDefault)]}
                   onPress={() => setCategory(cat)}
                 >
-                  {meta && <Text style={styles.chipIcon}>{meta.icon}</Text>}
+                  {meta && <Ionicons name={meta.icon} size={13} color={isActive ? meta.color : colors.inkSoft} style={styles.chipIcon} />}
                   <Text style={[styles.chipText, isActive && (meta ? { color: meta.color } : styles.chipTextActiveDefault)]}>
                     {cat === 'all' ? 'All' : cat.charAt(0).toUpperCase() + cat.slice(1)}
                   </Text>
@@ -197,10 +205,12 @@ export default function IngredientsScreen() {
             })}
           </ScrollView>
 
-          <TouchableOpacity style={styles.sortBtn} onPress={cycleSort}>
-            <Text style={styles.sortBtnText}>{SORT_LABELS[sortMode]}</Text>
-          </TouchableOpacity>
-        </View>
+          <View style={styles.sortRow}>
+            <TouchableOpacity style={styles.sortBtn} onPress={cycleSort}>
+              <Text style={styles.sortBtnText}>{SORT_LABELS[sortMode]}</Text>
+            </TouchableOpacity>
+          </View>
+        </>
       )}
 
       {/* Results count / status */}
@@ -209,7 +219,7 @@ export default function IngredientsScreen() {
           {isLoading ? (
             <Text style={styles.resultsCount}>Searching Open Beauty Facts…</Text>
           ) : apiError ? (
-            <Text style={[styles.resultsCount, { color: '#CA6F1E' }]}>{apiError}</Text>
+            <Text style={[styles.resultsCount, { color: colors.clay }]}>{apiError}</Text>
           ) : (
             <Text style={styles.resultsCount}>
               {displayProducts.length} results from Open Beauty Facts
@@ -244,9 +254,11 @@ export default function IngredientsScreen() {
         }
         ListEmptyComponent={
           !isLoading ? (
-            <Text style={styles.empty}>
-              {isApiMode ? 'No products found. Try a different search.' : 'No products match your filters.'}
-            </Text>
+            <EmptyState
+              icon="search-outline"
+              title="No products found"
+              description={isApiMode ? 'Try a different search.' : 'Try a different category or search term.'}
+            />
           ) : null
         }
       />
@@ -263,11 +275,11 @@ function NoDataCard({
   onScanBarcode: () => void;
   onScanIngredients: () => void;
 }) {
-  const meta = CATEGORY_META[product.category] ?? { icon: '📦', bg: '#F5F5F5', color: '#666' };
+  const meta = CATEGORY_META[product.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
   return (
     <View style={noDataStyles.card}>
       <View style={[noDataStyles.iconBox, { backgroundColor: meta.bg }]}>
-        <Text style={{ fontSize: 22 }}>{meta.icon}</Text>
+        <Ionicons name={meta.icon} size={22} color={meta.color} />
       </View>
       <View style={noDataStyles.info}>
         <Text style={noDataStyles.name} numberOfLines={1}>{product.name}</Text>
@@ -275,10 +287,12 @@ function NoDataCard({
         <Text style={noDataStyles.prompt}>No ingredient data — scan to analyse:</Text>
         <View style={noDataStyles.scanRow}>
           <TouchableOpacity style={noDataStyles.scanChip} onPress={onScanBarcode} activeOpacity={0.75}>
-            <Text style={noDataStyles.scanChipText}>📷 Scan barcode</Text>
+            <Ionicons name="camera-outline" size={12} color={colors.sage} />
+            <Text style={noDataStyles.scanChipText}>Scan barcode</Text>
           </TouchableOpacity>
           <TouchableOpacity style={noDataStyles.scanChip} onPress={onScanIngredients} activeOpacity={0.75}>
-            <Text style={noDataStyles.scanChipText}>🔬 Scan label</Text>
+            <Ionicons name="flask-outline" size={12} color={colors.sage} />
+            <Text style={noDataStyles.scanChipText}>Scan label</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -288,68 +302,64 @@ function NoDataCard({
 
 const noDataStyles = StyleSheet.create({
   card: {
-    backgroundColor: '#FFF', borderRadius: 16, padding: 14,
+    ...cardStyle,
     flexDirection: 'row', gap: 12, alignItems: 'flex-start',
-    borderWidth: 1, borderColor: '#F0F0F0',
-    shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 6, elevation: 1,
   },
   iconBox: {
     width: 48, height: 48, borderRadius: 14,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   info: { flex: 1, gap: 4 },
-  name: { fontSize: 14, fontWeight: '700', color: '#1A1A2E' },
-  brand: { fontSize: 12, color: '#888' },
-  prompt: { fontSize: 11, color: '#BBB', marginTop: 2 },
+  name: { ...typography.cardTitle, fontSize: 14, color: colors.ink },
+  brand: { fontSize: 12, color: colors.inkSoft },
+  prompt: { fontSize: 11, color: colors.inkSoft, marginTop: 2 },
   scanRow: { flexDirection: 'row', gap: 8, marginTop: 2 },
   scanChip: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#F0E6FF', borderRadius: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: colors.sageSoft, borderRadius: 8,
     paddingHorizontal: 10, paddingVertical: 5,
   },
-  scanChipText: { fontSize: 11, fontWeight: '700', color: '#9B59B6' },
+  scanChipText: { fontSize: 11, fontWeight: '700', color: colors.sage },
 });
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAFAF8' },
+  container: { flex: 1, backgroundColor: colors.paper },
   topBar: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
-  title: { fontSize: 26, fontWeight: '800', color: '#1A1A2E', letterSpacing: -0.5 },
-  subtitle: { fontSize: 13, color: '#AAA', marginTop: 2 },
+  title: { ...typography.screenTitle, color: colors.ink },
+  subtitle: { ...typography.body, color: colors.inkSoft, marginTop: 2 },
 
   searchBar: {
     flexDirection: 'row', alignItems: 'center',
     marginHorizontal: 16, marginBottom: 10,
-    backgroundColor: '#FFF', borderRadius: 14,
-    paddingHorizontal: 12, borderWidth: 1, borderColor: '#EBEBEB',
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+    backgroundColor: colors.surface, borderRadius: 14,
+    paddingHorizontal: 12, borderWidth: 1, borderColor: colors.line,
   },
-  searchIcon: { fontSize: 16, marginRight: 8 },
-  input: { flex: 1, paddingVertical: 13, fontSize: 15, color: '#333' },
+  searchIcon: { marginRight: 8 },
+  input: { flex: 1, paddingVertical: 13, fontSize: 15, color: colors.ink },
   scanBtns: { flexDirection: 'row', gap: 2, marginLeft: 4 },
   scanBtn: { padding: 4 },
-  scanIcon: { fontSize: 20 },
 
-  filterRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  chips: { paddingHorizontal: 16, gap: 8 },
+  chipsScroll: { flexGrow: 0, height: 44 },
+  chips: { paddingHorizontal: 16, gap: 8, alignItems: 'center' },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 12, paddingVertical: 7,
-    borderRadius: 20, borderWidth: 1.5, borderColor: '#E5E5E5',
-    backgroundColor: '#FFF',
+    borderRadius: 20, borderWidth: 1.5, borderColor: colors.line,
+    backgroundColor: colors.surface,
   },
-  chipActiveDefault: { backgroundColor: '#F0E6FF', borderColor: '#C8A2C8' },
-  chipIcon: { fontSize: 13 },
-  chipText: { fontSize: 12, fontWeight: '600', color: '#999' },
-  chipTextActiveDefault: { color: '#9B59B6' },
+  chipActiveDefault: { backgroundColor: colors.sageSoft, borderColor: colors.sage },
+  chipIcon: {},
+  chipText: { fontSize: 12, fontWeight: '600', color: colors.inkSoft },
+  chipTextActiveDefault: { color: colors.sage },
 
+  sortRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, marginBottom: 8 },
   sortBtn: {
-    marginRight: 12, paddingHorizontal: 12, paddingVertical: 7,
-    borderRadius: 20, backgroundColor: '#1A1A2E', flexShrink: 0,
+    paddingHorizontal: 12, paddingVertical: 7,
+    borderRadius: 20, backgroundColor: colors.ink,
   },
-  sortBtnText: { fontSize: 11, fontWeight: '700', color: '#FFF' },
+  sortBtnText: { fontSize: 11, fontWeight: '700', color: colors.surface },
 
   apiStatusRow: { paddingHorizontal: 16, marginBottom: 8 },
-  resultsCount: { fontSize: 12, color: '#BBB', paddingHorizontal: 16, marginBottom: 8, fontWeight: '600' },
+  resultsCount: { fontSize: 12, color: colors.inkSoft, paddingHorizontal: 16, marginBottom: 8, fontWeight: '600' },
   list: { paddingHorizontal: 16, paddingBottom: 30, gap: 10 },
-  empty: { textAlign: 'center', color: '#BBB', marginTop: 60, fontSize: 14 },
 });
