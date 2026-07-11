@@ -12,6 +12,8 @@ import ScoreRing from '../components/ScoreRing';
 import EmptyState from '../components/EmptyState';
 import { isOnShelf, toggleShelf } from '../utils/shelfStorage';
 import { getPriceOverride, setPriceOverride as savePriceOverride, PriceOverride } from '../utils/priceOverrides';
+import { getApprovedSubmissions } from '../api/submissions';
+import { Product } from '../types';
 import { AppStackParamList, ProductDetailScreenProps } from '../types/navigation';
 import { colors, typography, fontFamilies, cardStyle, scoreColor } from '../theme';
 import { useToast } from '../context/ToastContext';
@@ -25,6 +27,7 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
   const [saved, setSaved] = useState(false);
   const [priceOverride, setPriceOverrideState] = useState<PriceOverride | null>(null);
   const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [approvedProducts, setApprovedProducts] = useState<Product[]>([]);
   const productId = route.params.productId;
   const baseProduct = PRODUCTS.find((p) => p.id === productId) ?? getCachedProduct(productId);
   const product = baseProduct && priceOverride
@@ -41,6 +44,12 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
       }
     }, [baseProduct?.id]),
   );
+
+  // Approved user submissions are viable alternatives too, not just the
+  // built-in catalog.
+  useEffect(() => {
+    getApprovedSubmissions().then(setApprovedProducts).catch(() => {});
+  }, []);
 
   async function handleReportPrice(newPrice: number) {
     if (!baseProduct) return;
@@ -86,7 +95,7 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
 
   const meta = CATEGORY_META[product.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
   const { comedogenic, irritant } = countFlags(product.ingredients);
-  const topDupes = findDupes(product, PRODUCTS).slice(0, 3);
+  const topDupes = findDupes(product, [...PRODUCTS, ...approvedProducts]);
 
   return (
     <>
@@ -194,10 +203,13 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
         })}
       </View>
 
-      {/* Top dupes */}
+      {/* Alternatives */}
       {topDupes.length > 0 && (
         <>
-          <Text style={styles.sectionLabel}>Top Alternatives</Text>
+          <Text style={styles.sectionLabel}>Alternatives</Text>
+          <Text style={styles.sectionSubLabel}>
+            {topDupes.length} alternative{topDupes.length !== 1 ? 's' : ''} · sorted by match score
+          </Text>
           {!topDupes.some((d) => d.score >= LOW_CONFIDENCE_THRESHOLD) ? (
             <EmptyState
               icon="help-circle-outline"
@@ -365,6 +377,7 @@ const styles = StyleSheet.create({
   summaryOrangeText: { color: colors.gold },
 
   sectionLabel: { ...typography.eyebrow, color: colors.inkSoft },
+  sectionSubLabel: { fontSize: 12, color: colors.inkSoft, marginTop: -6, marginBottom: 10 },
 
   ingredientCard: { ...cardStyle, padding: 0, overflow: 'hidden' },
   ingredientRow: { padding: 14, flexDirection: 'row', alignItems: 'flex-start', gap: 10 },

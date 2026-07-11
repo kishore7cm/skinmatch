@@ -10,7 +10,6 @@ import type { IoniconName } from './src/components/ProductCard';
 import HomeScreen from './src/screens/HomeScreen';
 import RoutineScreen from './src/screens/RoutineScreen';
 import IngredientsScreen from './src/screens/IngredientsScreen';
-import DupesScreen from './src/screens/DupesScreen';
 import ShelfScreen from './src/screens/ShelfScreen';
 import ProductDetailScreen from './src/screens/ProductDetailScreen';
 import ProfileEditScreen from './src/screens/ProfileEditScreen';
@@ -33,7 +32,6 @@ const OnboardingStack  = createNativeStackNavigator<OnboardingStackParamList>();
 const HomeStack        = createNativeStackNavigator<AppStackParamList>();
 const RoutineStack     = createNativeStackNavigator<AppStackParamList>();
 const IngredientsStack = createNativeStackNavigator<AppStackParamList>();
-const DupesStack       = createNativeStackNavigator<AppStackParamList>();
 const ShelfStack       = createNativeStackNavigator<AppStackParamList>();
 
 const STACK_OPTIONS = {
@@ -96,19 +94,6 @@ function IngredientsNavigator() {
   );
 }
 
-function DupesNavigator() {
-  return (
-    <DupesStack.Navigator screenOptions={STACK_OPTIONS}>
-      <DupesStack.Screen name="Home" component={DupesScreen} options={{ headerShown: false }} />
-      <DupesStack.Screen name="ProductDetail" component={ProductDetailScreen} />
-      <DupesStack.Screen name="ProfileEdit" component={ProfileEditScreen} options={{ title: 'Edit Profile' }} />
-      <DupesStack.Screen name="About" component={AboutScreen} options={{ title: 'About' }} />
-      <DupesStack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
-      <DupesStack.Screen name="MySubmissions" component={MySubmissionsScreen} options={{ title: 'My Submissions' }} />
-    </DupesStack.Navigator>
-  );
-}
-
 function ShelfNavigator() {
   return (
     <ShelfStack.Navigator screenOptions={STACK_OPTIONS}>
@@ -129,7 +114,6 @@ const TAB_META: Record<string, IoniconName> = {
   Home:        'home',
   Routine:     'clipboard',
   Ingredients: 'flask',
-  Dupes:       'swap-horizontal',
   'My Shelf':  'bookmark',
 };
 
@@ -159,7 +143,6 @@ function MainTabs() {
       <Tab.Screen name="Home"        component={HomeNavigator} />
       <Tab.Screen name="Routine"     component={RoutineNavigator} />
       <Tab.Screen name="Ingredients" component={IngredientsNavigator} options={{ tabBarLabel: 'Products' }} />
-      <Tab.Screen name="Dupes"       component={DupesNavigator} />
       <Tab.Screen name="My Shelf"    component={ShelfNavigator} />
     </Tab.Navigator>
   );

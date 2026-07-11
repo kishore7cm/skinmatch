@@ -158,8 +158,8 @@ export default function HomeScreen() {
     {
       icon: 'swap-horizontal-outline',
       title: 'Find your first dupe',
-      desc: 'Compare a product against cheaper alternatives.',
-      tab: 'Dupes',
+      desc: 'Open any product in Products to see its cheapest alternatives.',
+      tab: 'Ingredients',
     },
   ];
 
@@ -195,8 +195,8 @@ export default function HomeScreen() {
       : {
           icon: 'swap-horizontal-outline',
           title: 'Find a cheaper dupe',
-          desc: 'Compare your products against thousands of alternatives.',
-          tab: 'Dupes',
+          desc: 'Open a product in Products to compare it against alternatives.',
+          tab: 'Ingredients',
         };
 
   return (

@@ -173,7 +173,7 @@ export default function ShelfScreen() {
   }
 
   function handleFindAlternative(product: Product) {
-    (navigation.getParent()?.navigate as any)('Dupes', { screen: 'Home', params: { productId: product.id } });
+    navigation.navigate('ProductDetail', { productId: product.id });
   }
 
   async function handleToggleStatus(product: Product, newStatus: ShelfStatus) {
