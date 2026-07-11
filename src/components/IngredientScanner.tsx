@@ -7,26 +7,8 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import { extractIngredientsFromImage } from '../api/claudeVision';
 import { getIngredientFlag, countFlags } from '../utils/ingredientUtils';
+import { parseIngredients } from '../utils/parseIngredients';
 import { colors, typography, cardStyle } from '../theme';
-
-// Inline ingredient parser (same logic as productMapper, kept local to avoid circular deps)
-function parseIngredients(raw: string): string[] {
-  if (!raw || raw.length < 5) return [];
-  return raw
-    .replace(/\r?\n/g, ', ')
-    .replace(/\*+/g, '')
-    .replace(/\[[^\]]*\]/g, '')
-    .replace(/\([^)]*\)/g, '')
-    .replace(/\d+\.?\s(?=[A-Z])/g, '')
-    .split(/[,;]/)
-    .flatMap((s) => s.split('/').slice(0, 1))
-    .map((s) => {
-      const t = s.replace(/_/g, ' ').trim();
-      return t.charAt(0).toUpperCase() + t.slice(1);
-    })
-    .filter((s) => s.length >= 3 && s.length <= 70 && /[a-zA-Z]/.test(s))
-    .slice(0, 50);
-}
 
 type Screen = 'camera' | 'processing' | 'results' | 'error';
 

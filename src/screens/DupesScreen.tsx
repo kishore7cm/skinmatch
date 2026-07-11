@@ -15,6 +15,7 @@ import { searchBeautyProducts } from '../api/openBeautyFacts';
 import { mapOBFProducts } from '../utils/productMapper';
 import { cacheProducts, getCachedProduct } from '../utils/productCache';
 import { getShelfProduct } from '../utils/shelfStorage';
+import { getApprovedSubmissions } from '../api/submissions';
 import BarcodeScanner from '../components/BarcodeScanner';
 import EmptyState from '../components/EmptyState';
 import { colors, typography, cardStyle } from '../theme';
@@ -32,12 +33,19 @@ export default function DupesScreen() {
   const [apiProducts, setApiProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [approvedProducts, setApprovedProducts] = useState<Product[]>([]);
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isApiMode = query.length >= 3;
+
+  // Approved user submissions, merged additively into the picker + candidate
+  // pool below — the existing local-catalog + OBF search logic is untouched.
+  useEffect(() => {
+    getApprovedSubmissions().then(setApprovedProducts).catch(() => {});
+  }, []);
 
   // Preselect a product when arriving with explicit context (e.g. "Find a
   // gentler alternative" from a Shelf conflict card).
@@ -92,17 +100,18 @@ export default function DupesScreen() {
   const pickerProducts = useMemo(() => {
     if (isApiMode) return apiProducts;
     const q = query.toLowerCase();
-    return PRODUCTS.filter((p) => {
+    return [...PRODUCTS, ...approvedProducts].filter((p) => {
       const matchesQuery = !q || p.name.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q);
       const matchesCat = category === 'all' || p.category === category;
       return matchesQuery && matchesCat;
     });
-  }, [query, category, isApiMode, apiProducts]);
+  }, [query, category, isApiMode, apiProducts, approvedProducts]);
 
-  // Candidate pool for dupe scoring: local products + any API products returned
+  // Candidate pool for dupe scoring: local products + approved submissions +
+  // any API products returned
   const candidatePool = useMemo(
-    () => [...PRODUCTS, ...apiProducts],
-    [apiProducts],
+    () => [...PRODUCTS, ...approvedProducts, ...apiProducts],
+    [apiProducts, approvedProducts],
   );
 
   const dupes: DupeResult[] = useMemo(
@@ -348,7 +357,10 @@ const styles = StyleSheet.create({
 
   apiLabel: { fontSize: 12, color: colors.inkSoft, fontWeight: '600', paddingHorizontal: 16, marginBottom: 6 },
 
-  pickerRow: { paddingHorizontal: 16, paddingBottom: 10, gap: 10 },
+  // alignItems: 'flex-start' overrides the horizontal ScrollView's default
+  // row stretch, which otherwise forces every card to match the tallest
+  // sibling's height, leaving dead space below shorter cards' content.
+  pickerRow: { paddingHorizontal: 16, paddingBottom: 10, gap: 10, alignItems: 'flex-start' },
   pickerChip: {
     borderWidth: 1.5, borderRadius: 14, padding: 12, width: 140,
     backgroundColor: colors.surface, gap: 3,

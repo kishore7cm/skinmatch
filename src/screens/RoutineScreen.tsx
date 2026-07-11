@@ -10,19 +10,20 @@ import { ROUTINES, STEP_TYPE_LABELS } from '../data/routines';
 import { CONCERNS, Concern } from '../data/concerns';
 import { getProfile, saveProfile } from '../utils/profileStorage';
 import { PRODUCTS } from '../data/products';
-import { getShelf, getShelfProduct } from '../utils/shelfStorage';
+import { getShelf, getShelfProduct, ensureOnShelfAsUsing, setShelfStatus } from '../utils/shelfStorage';
 import { getCachedProduct } from '../utils/productCache';
 import { getAssignments, setAssignment, removeAssignment, Assignment, AssignmentSource } from '../utils/routineAssignments';
 import { checkConcernCoverage, checkSkinTypeCautions } from '../utils/routineFit';
 import { routineMonthlyCost, RoutineCostLine, RoutineCostSummary } from '../utils/routineCost';
 import { recommendForStep, RecommendationPreferences, scorePreferenceFit, categoryMedianPrice } from '../utils/routineRecommendations';
-import { findDupes, dupeExplanation } from '../utils/matching';
+import { findDupes, dupeExplanation, matchLabel, LOW_CONFIDENCE_THRESHOLD } from '../utils/matching';
+import ScoreRing from '../components/ScoreRing';
 import { PER_USE_ML, estimatedUses } from '../data/usageDefaults';
 import { Ionicons } from '@expo/vector-icons';
 import { CATEGORY_META, IoniconName } from '../components/ProductCard';
 import ProductPickerModal from '../components/ProductPickerModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { colors, typography, fontFamilies, cardStyle, scoreColor, scoreBgColor, borders } from '../theme';
+import { colors, typography, fontFamilies, cardStyle, scoreColor, borders } from '../theme';
 import { useToast } from '../context/ToastContext';
 import PressableScale from '../components/PressableScale';
 
@@ -40,7 +41,7 @@ const SKIN_TYPES: { type: SkinType; icon: IoniconName; label: string; descriptio
 
 // Step type is now differentiated by icon + label only, not a per-category
 // pastel background — one consistent card treatment across every step.
-const STEP_META: Record<string, { icon: IoniconName }> = {
+export const STEP_META: Record<string, { icon: IoniconName }> = {
   cleanse:    { icon: 'water-outline' },
   tone:       { icon: 'leaf-outline' },
   treat:      { icon: 'sparkles' },
@@ -104,21 +105,45 @@ export default function RoutineScreen() {
     await saveProfile({ skinType: type });
   }
 
+  // A product genuinely plugged into the routine must be conflict-checked,
+  // so assigning it always promotes it to "using" on the shelf — whether or
+  // not it was ever separately bookmarked there.
   async function handleAssign(stepType: string, product: Product, source: AssignmentSource) {
-    const wasAssigned = !!assignments[stepType];
+    const previous = assignments[stepType];
     await setAssignment(stepType, product.id, source);
+    await ensureOnShelfAsUsing(product);
+
+    if (previous && previous.productId !== product.id) {
+      await revertShelfStatusIfUnused(previous.productId, stepType);
+    }
+
     setAssignments((prev) => ({ ...prev, [stepType]: { productId: product.id, source } }));
     setPickerStep(null);
-    showToast(wasAssigned ? 'Swap applied' : 'Added to your routine');
+    showToast(previous ? 'Swap applied' : 'Added to your routine');
+  }
+
+  // Mirrors handleAssign: a product no longer in any step shouldn't keep
+  // being conflict-checked just because it once was.
+  async function revertShelfStatusIfUnused(productId: string, excludeStepType: string) {
+    const stillUsedElsewhere = Object.entries(assignments).some(
+      ([stepType, a]) => stepType !== excludeStepType && a.productId === productId,
+    );
+    if (!stillUsedElsewhere) {
+      await setShelfStatus(productId, 'considering');
+    }
   }
 
   async function handleUnassign(stepType: string) {
+    const removed = assignments[stepType];
     await removeAssignment(stepType);
     setAssignments((prev) => {
       const next = { ...prev };
       delete next[stepType];
       return next;
     });
+    if (removed) {
+      await revertShelfStatusIfUnused(removed.productId, stepType);
+    }
   }
 
   function resolveAssignedProduct(productId: string): Product | undefined {
@@ -162,7 +187,7 @@ export default function RoutineScreen() {
 
         {/* Header */}
         <View style={styles.header}>
-          <View>
+          <View style={styles.headerInfo}>
             <View style={styles.brandRow}>
               <Ionicons name="sparkles" size={18} color={colors.sage} />
               <Text style={styles.brandLogo}>SkinMatch</Text>
@@ -173,9 +198,6 @@ export default function RoutineScreen() {
                 : 'Your daily skincare guide'}
             </Text>
           </View>
-          <TouchableOpacity style={styles.editBtn} onPress={() => navigation.navigate('ProfileEdit')}>
-            <Text style={styles.editBtnText}>Edit Profile</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Profile summary */}
@@ -185,7 +207,7 @@ export default function RoutineScreen() {
               <View style={styles.profileIconBox}>
                 <Ionicons name={SKIN_TYPES.find((s) => s.type === skinType)?.icon ?? 'water'} size={26} color={colors.sage} />
               </View>
-              <View>
+              <View style={styles.profileRight}>
                 <Text style={styles.profileSkinType}>
                   {skinType.charAt(0).toUpperCase() + skinType.slice(1)} skin
                 </Text>
@@ -425,7 +447,11 @@ export default function RoutineScreen() {
                     key={`${c.product.id}-${c.type}`}
                     style={[styles.fitRow, i < cautions.length - 1 && styles.fitRowBorder]}
                   >
-                    <Ionicons name="warning-outline" size={18} color={colors.clay} />
+                    <Ionicons
+                      name="warning-outline"
+                      size={18}
+                      color={c.type === 'comedogenic' ? colors.clay : colors.gold}
+                    />
                     <View style={styles.fitRowText}>
                       <Text style={styles.fitRowTitle}>
                         {STEP_TYPE_LABELS[c.stepType] ?? c.stepType}: {c.product.name}
@@ -610,10 +636,16 @@ function AlternativesPanel({
     .sort((a, b) => (b.dupe.score + b.bonus) - (a.dupe.score + a.bonus))
     .slice(0, 5);
 
-  if (dupes.length === 0) {
+  const hasStrongMatch = dupes.some(({ dupe }) => dupe.score >= LOW_CONFIDENCE_THRESHOLD);
+
+  if (dupes.length === 0 || !hasStrongMatch) {
     return (
       <View style={styles.altPanel}>
-        <Text style={styles.altEmpty}>No close alternative found in the catalog yet for this product.</Text>
+        <Text style={styles.altEmpty}>
+          {dupes.length === 0
+            ? 'No close alternative found in the catalog yet for this product.'
+            : "No strong alternatives found — nothing shares enough ingredients with this product yet."}
+        </Text>
       </View>
     );
   }
@@ -625,6 +657,7 @@ function AlternativesPanel({
         const priceLabel = (source.price === 0 || dupe.product.price === 0)
           ? 'No price data'
           : dupe.priceDiff === 0 ? 'Same price' : dupe.priceDiff > 0 ? `$${dupe.priceDiff} more` : `$${Math.abs(dupe.priceDiff)} less`;
+        const isLowConfidence = dupe.score < LOW_CONFIDENCE_THRESHOLD;
         return (
           <PressableScale
             key={dupe.product.id}
@@ -648,9 +681,15 @@ function AlternativesPanel({
               <Text style={styles.recReason} numberOfLines={2}>
                 {dupeExplanation(dupe)} · {priceLabel}
               </Text>
+              {isLowConfidence && (
+                <Text style={styles.lowConfidenceNote} numberOfLines={2}>
+                  Limited overlap — mainly matches on price or category, not shared actives.
+                </Text>
+              )}
             </View>
-            <View style={[styles.smallScorePill, { backgroundColor: scoreBgColor(dupe.score) }]}>
-              <Text style={[styles.smallScorePillNum, { color: scoreColor(dupe.score) }]}>{dupe.score}</Text>
+            <View style={styles.smallScoreWrap}>
+              <ScoreRing score={dupe.score} size={36} />
+              <Text style={[styles.smallScoreLabel, { color: scoreColor(dupe.score) }]}>{matchLabel(dupe.score)}</Text>
             </View>
           </PressableScale>
         );
@@ -746,11 +785,13 @@ const styles = StyleSheet.create({
   content: { padding: 20, paddingBottom: 40, gap: 20 },
 
   header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  // flex: 1 (not the RN View default of flexShrink: 0) so long skin-type +
+  // concern combinations wrap onto a new line instead of overflowing the
+  // screen edge.
+  headerInfo: { flex: 1 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   brandLogo: { ...typography.screenTitle, color: colors.ink },
-  brandSub: { ...typography.body, color: colors.inkSoft, marginTop: 2 },
-  editBtn: { backgroundColor: colors.sageSoft, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
-  editBtnText: { ...typography.bodyStrong, fontSize: 12, color: colors.sage },
+  brandSub: { ...typography.body, color: colors.inkSoft, marginTop: 2, flexWrap: 'wrap' },
 
   profileCard: { ...cardStyle },
   profileLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
@@ -758,6 +799,9 @@ const styles = StyleSheet.create({
     width: 48, height: 48, borderRadius: 14, backgroundColor: colors.sageSoft,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
+  // flex: 1 so the concern chip row is actually bounded by the card's width
+  // and its flexWrap can engage, instead of growing past the card edge.
+  profileRight: { flex: 1 },
   profileSkinType: { ...typography.cardTitle, color: colors.ink, marginBottom: 6 },
   concernChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   concernChip: {
@@ -841,9 +885,10 @@ const styles = StyleSheet.create({
   recTagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 3 },
   recTag: { backgroundColor: colors.sageSoft, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   recTagText: { fontSize: 9, fontWeight: '700', color: colors.sage, textTransform: 'uppercase', letterSpacing: 0.3 },
-  smallScorePill: { borderRadius: 8, width: 32, height: 32, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  smallScorePillNum: { fontSize: 13, fontWeight: '800' },
+  smallScoreWrap: { alignItems: 'center', gap: 2, flexShrink: 0 },
+  smallScoreLabel: { fontSize: 9, fontWeight: '700' },
   recReason: { fontSize: 11, color: colors.inkSoft, lineHeight: 14 },
+  lowConfidenceNote: { fontSize: 10, color: colors.gold, marginTop: 3, lineHeight: 13 },
 
   altToggle: {
     flexDirection: 'row', alignItems: 'center', gap: 6,

@@ -1,5 +1,6 @@
 import { Product } from '../types';
 import { OBFProduct } from '../api/openBeautyFacts';
+import { parseIngredients } from './parseIngredients';
 
 // Category keywords checked against OBF category tags (which are multilingual)
 const CATEGORY_MAP: Array<[string[], Product['category']]> = [
@@ -17,30 +18,11 @@ function mapCategory(tags: string[]): Product['category'] {
   return 'moisturizer';
 }
 
-function parseIngredients(raw: string): string[] {
-  if (!raw || raw.length < 5) return [];
-
-  return raw
-    .replace(/\r?\n/g, ', ')            // newlines → commas
-    .replace(/\*+/g, '')                 // strip asterisks (organic markers)
-    .replace(/\[[^\]]*\]/g, '')          // strip [bracketed notes]
-    .replace(/\([^)]*\)/g, '')           // strip (parenthetical notes)
-    .replace(/\d+\.?\s(?=[A-Z])/g, '')   // strip "1. " numbering
-    .split(/[,;]/)
-    .flatMap((s) => s.split('/').slice(0, 1)) // bilingual "Aqua/Water" → take first
-    .map((s) => {
-      const t = s.replace(/_/g, ' ').trim();
-      return t.charAt(0).toUpperCase() + t.slice(1); // sentence-case
-    })
-    .filter((s) => s.length >= 3 && s.length <= 70 && /[a-zA-Z]/.test(s))
-    .slice(0, 30);
-}
-
 export function mapOBFProduct(raw: OBFProduct): Product | null {
   const name = raw.product_name?.trim();
   if (!name || name.length < 2) return null;
 
-  const ingredients = parseIngredients(raw.ingredients_text ?? '');
+  const ingredients = parseIngredients(raw.ingredients_text ?? '', 30);
 
   return {
     id: `obf_${raw.code}`,

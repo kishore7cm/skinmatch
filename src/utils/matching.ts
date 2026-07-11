@@ -111,3 +111,14 @@ export function dupeExplanation(dupe: DupeResult): string {
   const suffix = highlights.length ? ` incl. ${highlights.join(' + ')}` : '';
   return `Shares ${dupe.sharedCount}/${dupe.totalUnique} actives${suffix}`;
 }
+
+// Below this, a match is mostly coincidental overlap (price/category), not real
+// shared actives — matches the existing "Decent" tier boundary used elsewhere
+// (scoreColor/scoreBgColor), so "low confidence" means the same thing everywhere.
+export const LOW_CONFIDENCE_THRESHOLD = 40;
+
+// The score is 0-100 (Jaccard similarity, adjusted) — never a 0-10 scale, so the
+// label is always a percentage, never "x/10".
+export function matchLabel(score: number): string {
+  return `${score}% match`;
+}

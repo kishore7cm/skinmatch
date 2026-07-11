@@ -17,8 +17,10 @@ import { Product } from '../types';
 import { searchBeautyProducts } from '../api/openBeautyFacts';
 import { mapOBFProducts } from '../utils/productMapper';
 import { cacheProducts } from '../utils/productCache';
+import { getApprovedSubmissions } from '../api/submissions';
 import { colors, typography, cardStyle } from '../theme';
 import EmptyState from '../components/EmptyState';
+import ProductSubmissionFlow from '../components/ProductSubmissionFlow';
 
 type Nav = NativeStackNavigationProp<AppStackParamList>;
 type Category = 'all' | Product['category'];
@@ -45,11 +47,20 @@ export default function IngredientsScreen() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [ingredientScannerOpen, setIngredientScannerOpen] = useState(false);
   const [noDataProduct, setNoDataProduct] = useState<Product | null>(null);
+  const [submissionOpen, setSubmissionOpen] = useState(false);
+  const [submissionBarcode, setSubmissionBarcode] = useState<string | undefined>(undefined);
+  const [approvedProducts, setApprovedProducts] = useState<Product[]>([]);
   const navigation = useNavigation<Nav>();
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isApiMode = query.length >= 3;
+
+  // Approved user submissions, merged additively into local search — the
+  // existing local-catalog + OBF search logic below is untouched.
+  useEffect(() => {
+    getApprovedSubmissions().then(setApprovedProducts).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!isApiMode) {
@@ -92,7 +103,7 @@ export default function IngredientsScreen() {
   }
 
   const localFiltered = useMemo(() => {
-    let list = PRODUCTS.filter((p) => {
+    let list = [...PRODUCTS, ...approvedProducts].filter((p) => {
       const q = query.toLowerCase();
       const matchesQuery =
         !q ||
@@ -117,18 +128,23 @@ export default function IngredientsScreen() {
       case 'name': return [...list].sort((a, b) => a.name.localeCompare(b.name));
       default:     return list;
     }
-  }, [query, category, sortMode]);
+  }, [query, category, sortMode, approvedProducts]);
 
   const displayProducts = isApiMode ? (apiError ? localFiltered : apiProducts) : localFiltered;
 
-  function flagSubtitle(product: Product): string {
+  // Matches the color tokens used on ProductDetailScreen's own flag counts
+  // (clay for comedogenic, gold for irritant) so the same signal reads the
+  // same way in the list as it does once you open the product.
+  function flagSubtitle(product: Product): React.ReactNode {
     const { comedogenic, irritant } = countFlags(product.ingredients);
-    const total = comedogenic + irritant;
-    if (total === 0) return '✓ No flagged ingredients';
-    return [
-      comedogenic > 0 ? `${comedogenic} pore-clogging` : '',
-      irritant > 0 ? `${irritant} irritant` : '',
-    ].filter(Boolean).join(' · ');
+    if (comedogenic === 0 && irritant === 0) return '✓ No flagged ingredients';
+    return (
+      <>
+        {comedogenic > 0 && <Text style={{ color: colors.clay }}>{comedogenic} pore-clogging</Text>}
+        {comedogenic > 0 && irritant > 0 && <Text> · </Text>}
+        {irritant > 0 && <Text style={{ color: colors.gold }}>{irritant} irritant</Text>}
+      </>
+    );
   }
 
   return (
@@ -171,11 +187,21 @@ export default function IngredientsScreen() {
         onProductFound={(product) => {
           navigation.navigate('ProductDetail', { productId: product.id });
         }}
+        onSubmitProduct={(barcode) => {
+          setSubmissionBarcode(barcode);
+          setSubmissionOpen(true);
+        }}
       />
 
       <IngredientScanner
         visible={ingredientScannerOpen}
         onClose={() => { setIngredientScannerOpen(false); setNoDataProduct(null); }}
+      />
+
+      <ProductSubmissionFlow
+        visible={submissionOpen}
+        onClose={() => setSubmissionOpen(false)}
+        initialBarcode={submissionBarcode}
       />
 
       {/* Category filter + sort — hidden in API mode */}
@@ -257,7 +283,15 @@ export default function IngredientsScreen() {
             <EmptyState
               icon="search-outline"
               title="No products found"
-              description={isApiMode ? 'Try a different search.' : 'Try a different category or search term.'}
+              description={
+                isApiMode
+                  ? "Can't find it? It might not be in our database yet."
+                  : 'Try a different category or search term.'
+              }
+              action={isApiMode ? {
+                label: 'Submit this product',
+                onPress: () => { setSubmissionBarcode(undefined); setSubmissionOpen(true); },
+              } : undefined}
             />
           ) : null
         }

@@ -22,7 +22,7 @@ interface Props {
   onPress: () => void;
   score?: number;
   scoreLabel?: string;
-  subtitle?: string;
+  subtitle?: React.ReactNode;
 }
 
 export default function ProductCard({ product, onPress, score, scoreLabel, subtitle }: Props) {

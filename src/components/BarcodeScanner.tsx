@@ -14,12 +14,14 @@ interface Props {
   visible: boolean;
   onClose: () => void;
   onProductFound: (product: Product) => void;
+  onSubmitProduct?: (barcode: string) => void;
 }
 
-export default function BarcodeScanner({ visible, onClose, onProductFound }: Props) {
+export default function BarcodeScanner({ visible, onClose, onProductFound, onSubmitProduct }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const [status, setStatus] = useState<'scanning' | 'loading' | 'notfound'>('scanning');
   const [scanned, setScanned] = useState(false);
+  const [notFoundBarcode, setNotFoundBarcode] = useState('');
 
   const reset = useCallback(() => {
     setScanned(false);
@@ -39,11 +41,13 @@ export default function BarcodeScanner({ visible, onClose, onProductFound }: Pro
     try {
       const raw = await getBeautyProductByBarcode(data);
       if (!raw) {
+        setNotFoundBarcode(data);
         setStatus('notfound');
         return;
       }
       const product = mapOBFProduct(raw);
       if (!product) {
+        setNotFoundBarcode(data);
         setStatus('notfound');
         return;
       }
@@ -145,9 +149,19 @@ export default function BarcodeScanner({ visible, onClose, onProductFound }: Pro
                 <View style={styles.statusCard}>
                   <Ionicons name="sad-outline" size={32} color={colors.inkSoft} />
                   <Text style={styles.statusText}>Product not found in Open Beauty Facts</Text>
-                  <TouchableOpacity style={styles.retryBtn} onPress={reset}>
-                    <Text style={styles.retryText}>Try Again</Text>
-                  </TouchableOpacity>
+                  <View style={styles.notFoundActions}>
+                    <TouchableOpacity style={styles.retryBtn} onPress={reset}>
+                      <Text style={styles.retryText}>Try Again</Text>
+                    </TouchableOpacity>
+                    {onSubmitProduct && (
+                      <TouchableOpacity
+                        style={styles.submitBtn}
+                        onPress={() => { const bc = notFoundBarcode; reset(); onClose(); onSubmitProduct(bc); }}
+                      >
+                        <Text style={styles.submitBtnText}>Submit this product</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
               )}
             </View>
@@ -232,9 +246,15 @@ const styles = StyleSheet.create({
     alignItems: 'center', gap: 10, width: '100%',
   },
   statusText: { fontSize: 14, color: colors.ink, textAlign: 'center' },
+  notFoundActions: { flexDirection: 'row', gap: 10 },
   retryBtn: {
     backgroundColor: colors.sage, borderRadius: 12,
-    paddingHorizontal: 24, paddingVertical: 10,
+    paddingHorizontal: 20, paddingVertical: 10,
   },
   retryText: { color: colors.surface, fontWeight: '700', fontSize: 14 },
+  submitBtn: {
+    backgroundColor: colors.paper, borderRadius: 12, borderWidth: 1, borderColor: colors.line,
+    paddingHorizontal: 16, paddingVertical: 10,
+  },
+  submitBtnText: { color: colors.ink, fontWeight: '700', fontSize: 14 },
 });

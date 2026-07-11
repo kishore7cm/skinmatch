@@ -11,7 +11,11 @@ export type AppStackParamList = {
   Home: { productId?: string } | undefined;
   ProductDetail: { productId: string };
   ProfileEdit: undefined;
+  About: undefined;
+  Settings: undefined;
+  MySubmissions: undefined;
 };
 
 export type ProductDetailScreenProps = NativeStackScreenProps<AppStackParamList, 'ProductDetail'>;
 export type ProfileEditScreenProps   = NativeStackScreenProps<AppStackParamList, 'ProfileEdit'>;
+export type SettingsScreenProps      = NativeStackScreenProps<AppStackParamList, 'Settings'>;

@@ -1,15 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView, Switch, Platform, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SkinType, BudgetPreference, IntensityPreference } from '../types';
-import { getProfile, saveProfile, resetProfile, UserProfile } from '../utils/profileStorage';
-import { getAssignments, clearAllAssignments } from '../utils/routineAssignments';
-import { CONCERNS } from '../data/concerns';
+import { SkinType, BudgetPreference, IntensityPreference, Product } from '../types';
+import { getProfile, saveProfile, UserProfile } from '../utils/profileStorage';
+import { getAssignments, setAssignment, removeAssignment } from '../utils/routineAssignments';
+import { CONCERNS, Concern } from '../data/concerns';
+import { ROUTINES } from '../data/routines';
+import { PRODUCTS } from '../data/products';
+import { getCachedProduct } from '../utils/productCache';
+import { getShelfProduct } from '../utils/shelfStorage';
+import { recommendForStep, RecommendationPreferences } from '../utils/routineRecommendations';
 import { IoniconName } from '../components/ProductCard';
 import { ProfileEditScreenProps } from '../types/navigation';
 import { colors, typography, cardStyle } from '../theme';
 import { useToast } from '../context/ToastContext';
 import PressableScale from '../components/PressableScale';
+import ProfileRegenerationReview, { RegenerationPlanStep, ManualChoice } from '../components/ProfileRegenerationReview';
 
 const SKIN_TYPES: { type: SkinType; icon: IoniconName; label: string; description: string }[] = [
   { type: 'oily',        icon: 'water',            label: 'Oily',        description: 'Shiny, pores, breakout-prone' },
@@ -39,6 +45,8 @@ export default function ProfileEditScreen({ navigation }: ProfileEditScreenProps
   const [cleanPreference, setCleanPreference] = useState(false);
   const [saving, setSaving] = useState(false);
   const [original, setOriginal] = useState<UserProfile | null>(null);
+  const [reviewVisible, setReviewVisible] = useState(false);
+  const [plan, setPlan] = useState<RegenerationPlanStep[]>([]);
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -69,30 +77,103 @@ export default function ProfileEditScreen({ navigation }: ProfileEditScreenProps
     );
   }
 
+  async function resolveProduct(id: string): Promise<Product | null> {
+    return (
+      PRODUCTS.find((p) => p.id === id) ??
+      getCachedProduct(id) ??
+      (await getShelfProduct(id)) ??
+      null
+    );
+  }
+
+  // The step lineup varies by skin type (sensitive has no "treat" step, none
+  // has "tone" today) — always read it from the new skin type's own routine
+  // rather than assuming a fixed count.
+  async function buildRegenerationPlan(): Promise<RegenerationPlanStep[]> {
+    const [assignments, activeConcerns] = [
+      await getAssignments(),
+      CONCERNS.filter((c: Concern) => concerns.includes(c.id)),
+    ];
+    const preferences: RecommendationPreferences = { budgetPreference, intensityPreference, cleanPreference };
+    const routine = ROUTINES[skinType!];
+
+    return Promise.all(
+      routine.map(async (step): Promise<RegenerationPlanStep> => {
+        const currentAssignment = assignments[step.stepType] ?? null;
+        const currentProduct = currentAssignment ? await resolveProduct(currentAssignment.productId) : null;
+        const suggestion = recommendForStep(step.stepType, skinType!, activeConcerns, preferences, 1)[0] ?? null;
+        return { stepType: step.stepType, currentAssignment, currentProduct, suggestion };
+      }),
+    );
+  }
+
   async function handleSave() {
     if (hasProfileChanged()) {
       const assignments = await getAssignments();
       if (Object.keys(assignments).length > 0) {
-        Alert.alert(
-          'Update routine picks?',
-          'Your profile changed, so your currently assigned routine products will be cleared — the routine will re-recommend products that fit your new answers.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Save & Clear', style: 'destructive', onPress: handleSaveConfirm },
-          ],
-        );
+        setPlan(await buildRegenerationPlan());
+        setReviewVisible(true);
         return;
       }
     }
     await handleSaveConfirm();
   }
 
+  async function handleReviewCancel() {
+    setReviewVisible(false);
+    setPlan([]);
+  }
+
+  async function handleReviewConfirm(choices: Record<string, ManualChoice>) {
+    setReviewVisible(false);
+    setSaving(true);
+
+    // Drop assignments for step types that no longer exist in the new
+    // routine (e.g. switching to "sensitive", which has no "treat" step).
+    const currentAssignments = await getAssignments();
+    const newStepTypes = new Set(plan.map((p) => p.stepType));
+    await Promise.all(
+      Object.keys(currentAssignments)
+        .filter((stepType) => !newStepTypes.has(stepType))
+        .map((stepType) => removeAssignment(stepType)),
+    );
+
+    await Promise.all(plan.map(async (step) => {
+      if (!step.currentAssignment) return;
+
+      if (step.currentAssignment.source === 'auto') {
+        if (step.suggestion) {
+          await setAssignment(step.stepType, step.suggestion.product.id, 'auto');
+        } else {
+          await removeAssignment(step.stepType);
+        }
+        return;
+      }
+
+      // Manual: default is to keep it untouched. Explicitly accepting the
+      // fresh suggestion here is the same as accepting a recommendation
+      // elsewhere in the app, so it becomes 'auto' going forward.
+      const choice = choices[step.stepType] ?? 'keep';
+      if (choice === 'suggested' && step.suggestion) {
+        await setAssignment(step.stepType, step.suggestion.product.id, 'auto');
+      }
+    }));
+
+    await saveProfile({
+      skinType: skinType ?? undefined,
+      concerns,
+      budgetPreference,
+      intensityPreference,
+      cleanPreference,
+    });
+    setPlan([]);
+    setSaving(false);
+    navigation.goBack();
+    showToast('Profile updated — routine refreshed');
+  }
+
   async function handleSaveConfirm() {
     setSaving(true);
-    const changed = hasProfileChanged();
-    if (changed) {
-      await clearAllAssignments();
-    }
     await saveProfile({
       skinType: skinType ?? undefined,
       concerns,
@@ -102,27 +183,7 @@ export default function ProfileEditScreen({ navigation }: ProfileEditScreenProps
     });
     setSaving(false);
     navigation.goBack();
-    showToast(changed ? 'Profile updated — routine picks cleared' : 'Profile updated');
-  }
-
-  function handleResetPress() {
-    Alert.alert(
-      'Reset profile?',
-      'This clears your skin type, concerns, and preferences so you can go through onboarding again. Your shelf and routine picks stay untouched.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Reset', style: 'destructive', onPress: handleResetConfirm },
-      ],
-    );
-  }
-
-  async function handleResetConfirm() {
-    await resetProfile();
-    if (Platform.OS === 'web') {
-      window.location.reload();
-    } else {
-      Alert.alert('Profile reset', 'Close and reopen the app to go through onboarding again.');
-    }
+    showToast('Profile updated');
   }
 
   return (
@@ -222,11 +283,6 @@ export default function ProfileEditScreen({ navigation }: ProfileEditScreenProps
           />
         </View>
 
-        <TouchableOpacity style={styles.resetBtn} onPress={handleResetPress} activeOpacity={0.75}>
-          <Ionicons name="refresh-outline" size={16} color={colors.clay} />
-          <Text style={styles.resetBtnText}>Reset profile & start over</Text>
-        </TouchableOpacity>
-
       </ScrollView>
 
       <View style={styles.footer}>
@@ -238,6 +294,13 @@ export default function ProfileEditScreen({ navigation }: ProfileEditScreenProps
           <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Changes'}</Text>
         </PressableScale>
       </View>
+
+      <ProfileRegenerationReview
+        visible={reviewVisible}
+        plan={plan}
+        onCancel={handleReviewCancel}
+        onConfirm={handleReviewConfirm}
+      />
     </SafeAreaView>
   );
 }
@@ -289,12 +352,6 @@ const styles = StyleSheet.create({
   toggleInfo: { flex: 1, gap: 4 },
   toggleTitle: { ...typography.bodyStrong, fontSize: 14, color: colors.ink },
   toggleDesc: { fontSize: 12, color: colors.inkSoft, lineHeight: 16 },
-
-  resetBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    marginTop: 28, paddingVertical: 12,
-  },
-  resetBtnText: { fontSize: 13, fontWeight: '700', color: colors.clay },
 
   footer: { padding: 20, paddingTop: 12 },
   saveBtn: {

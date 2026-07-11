@@ -5,15 +5,15 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { AppStackParamList } from '../types/navigation';
 import { SkinType, Product } from '../types';
-import { ROUTINES } from '../data/routines';
+import { ROUTINES, STEP_CATEGORY } from '../data/routines';
 import { CONCERNS } from '../data/concerns';
 import { getProfile } from '../utils/profileStorage';
 import { PRODUCTS } from '../data/products';
-import { getShelf, getShelfProduct } from '../utils/shelfStorage';
+import { getShelf, getShelfProduct, getShelfStatuses, ShelfStatus } from '../utils/shelfStorage';
 import { getCachedProduct } from '../utils/productCache';
 import { getAssignments, Assignment } from '../utils/routineAssignments';
 import { checkConcernCoverage, checkSkinTypeCautions } from '../utils/routineFit';
-import { routineMonthlyCost } from '../utils/routineCost';
+import { routineMonthlyCost, monthlyCost } from '../utils/routineCost';
 import { checkConflicts } from '../utils/conflictChecker';
 import { colors, typography, fontFamilies, cardStyle } from '../theme';
 
@@ -25,19 +25,22 @@ export default function HomeScreen() {
   const [concerns, setConcerns] = useState<string[]>([]);
   const [assignments, setAssignments] = useState<Record<string, Assignment>>({});
   const [shelfProducts, setShelfProducts] = useState<Product[]>([]);
+  const [shelfStatuses, setShelfStatuses] = useState<Record<string, ShelfStatus>>({});
   const navigation = useNavigation<Nav>();
 
   useFocusEffect(
     useCallback(() => {
       async function load() {
-        const [profile, saved, ids] = await Promise.all([
+        const [profile, saved, ids, statuses] = await Promise.all([
           getProfile(),
           getAssignments(),
           getShelf(),
+          getShelfStatuses(),
         ]);
         setSkinType(profile.skinType);
         setConcerns(profile.concerns);
         setAssignments(saved);
+        setShelfStatuses(statuses);
 
         const resolved = await Promise.all(
           ids.map(async (id) =>
@@ -95,6 +98,7 @@ export default function HomeScreen() {
     ? checkConcernCoverage(activeConcerns, assignedList.map((a) => a.product))
     : [];
   const coveredCount = concernCoverage.filter((c) => c.covered).length;
+  const concernsNeedAttention = activeConcerns.length > 0 && coveredCount < activeConcerns.length;
   const cautions = checkSkinTypeCautions(skinType, assignedList);
 
   const costSummary = routineMonthlyCost(
@@ -107,7 +111,32 @@ export default function HomeScreen() {
   const symbol = costSummary.breakdown.find((l) => l.product?.currency)?.product?.currency === 'INR' ? '₹' : '$';
   const hasCost = costSummary.breakdown.some((l) => l.product);
 
-  const conflicts = shelfProducts.length >= 2 ? checkConflicts(shelfProducts) : [];
+  // Real comparison, not a fabricated number: for each assigned step, what
+  // would the median-priced product in that category cost per month at the
+  // same usage frequency, versus what the actual pick costs.
+  const monthlySavings = routine.reduce((sum, step) => {
+    const assignment = assignments[step.stepType];
+    const product = assignment ? resolveAssignedProduct(assignment.productId) : undefined;
+    if (!product) return sum;
+
+    const actual = monthlyCost(product, step.timesPerDay);
+    if (actual === undefined) return sum;
+
+    const category = STEP_CATEGORY[step.stepType];
+    const pricedCandidates = PRODUCTS.filter((p) => p.category === category && p.price > 0).sort((a, b) => a.price - b.price);
+    const median = pricedCandidates[Math.floor(pricedCandidates.length / 2)];
+    if (!median) return sum;
+
+    const medianMonthly = monthlyCost(median, step.timesPerDay);
+    if (medianMonthly === undefined || medianMonthly <= actual) return sum;
+
+    return sum + (medianMonthly - actual);
+  }, 0);
+
+  // Matches Shelf's own scope: only products actually marked "using" are
+  // conflict-checked, so this tile never disagrees with the Shelf tab.
+  const usingProducts = shelfProducts.filter((p) => (shelfStatuses[p.id] ?? 'considering') === 'using');
+  const conflicts = usingProducts.length >= 2 ? checkConflicts(usingProducts) : [];
 
   // Activity-based, not account-age-based: a long-dormant account with zero
   // shelf items and zero assignments is still "first-week" for this purpose.
@@ -174,14 +203,19 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
-        <View style={styles.header}>
-          <View style={styles.brandRow}>
-            <Ionicons name="sparkles" size={20} color={colors.sage} />
-            <Text style={styles.brandLogo}>SkinMatch</Text>
+        <View style={styles.headerRow}>
+          <View style={styles.header}>
+            <View style={styles.brandRow}>
+              <Ionicons name="sparkles" size={20} color={colors.sage} />
+              <Text style={styles.brandLogo}>SkinMatch</Text>
+            </View>
+            <Text style={styles.brandSub}>
+              {skinType.charAt(0).toUpperCase() + skinType.slice(1)} skin · your skincare at a glance
+            </Text>
           </View>
-          <Text style={styles.brandSub}>
-            {skinType.charAt(0).toUpperCase() + skinType.slice(1)} skin · your skincare at a glance
-          </Text>
+          <TouchableOpacity style={styles.settingsBtn} onPress={() => navigation.navigate('Settings')}>
+            <Ionicons name="settings-outline" size={22} color={colors.inkSoft} />
+          </TouchableOpacity>
         </View>
 
         {isFirstWeek ? (
@@ -250,8 +284,8 @@ export default function HomeScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.tile} onPress={() => goToTab('Routine')} activeOpacity={0.85}>
-                <View style={[styles.tileIconBox, { backgroundColor: colors.sageSoft }]}>
-                  <Ionicons name="checkmark-circle-outline" size={20} color={colors.sage} />
+                <View style={[styles.tileIconBox, { backgroundColor: concernsNeedAttention ? colors.claySoft : colors.sageSoft }]}>
+                  <Ionicons name="checkmark-circle-outline" size={20} color={concernsNeedAttention ? colors.clay : colors.sage} />
                 </View>
                 <Text style={styles.tileValue}>
                   {activeConcerns.length > 0 ? `${coveredCount}/${activeConcerns.length}` : '—'}
@@ -272,18 +306,34 @@ export default function HomeScreen() {
               <TouchableOpacity style={styles.tile} onPress={() => goToTab('My Shelf')} activeOpacity={0.85}>
                 <View style={[styles.tileIconBox, { backgroundColor: conflicts.length > 0 ? colors.claySoft : colors.sageSoft }]}>
                   <Ionicons
-                    name={shelfProducts.length < 2 ? 'bookmark-outline' : conflicts.length > 0 ? 'alert-circle-outline' : 'shield-checkmark-outline'}
+                    name={usingProducts.length < 2 ? 'bookmark-outline' : conflicts.length > 0 ? 'alert-circle-outline' : 'shield-checkmark-outline'}
                     size={20}
                     color={conflicts.length > 0 ? colors.clay : colors.sage}
                   />
                 </View>
-                <Text style={styles.tileValue}>
-                  {shelfProducts.length < 2 ? '—' : conflicts.length}
+                <Text style={[styles.tileValue, usingProducts.length < 2 && styles.tileValueDimmed]}>
+                  {usingProducts.length < 2 ? '0' : conflicts.length}
                 </Text>
                 <Text style={styles.tileLabel}>
-                  {shelfProducts.length < 2 ? 'Add 2+ shelf items' : `shelf conflict${conflicts.length !== 1 ? 's' : ''}`}
+                  {usingProducts.length < 2 ? 'Add 2+ items in use' : `shelf conflict${conflicts.length !== 1 ? 's' : ''}`}
                 </Text>
               </TouchableOpacity>
+            </View>
+
+            <View style={styles.savingsCard}>
+              <View style={styles.savingsIconBox}>
+                <Ionicons name="trending-down-outline" size={22} color={colors.sage} />
+              </View>
+              <View style={styles.savingsText}>
+                <Text style={styles.savingsValue}>
+                  {symbol}{monthlySavings.toFixed(2)}<Text style={styles.savingsValueUnit}>/mo</Text>
+                </Text>
+                <Text style={styles.savingsLabel}>
+                  {monthlySavings > 0
+                    ? 'saved vs. average-priced picks in your routine'
+                    : 'Assign products to see your savings vs. average'}
+                </Text>
+              </View>
             </View>
 
             <View style={styles.section}>
@@ -311,9 +361,14 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
   content: { padding: 20, paddingBottom: 40, gap: 20 },
 
-  header: { gap: 4 },
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  header: { gap: 4, flex: 1 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   brandLogo: { ...typography.screenTitle, color: colors.ink },
+  settingsBtn: {
+    width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surface,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.line,
+  },
   brandSub: { ...typography.body, color: colors.inkSoft },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
@@ -325,8 +380,22 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   tileValue: { fontFamily: fontFamilies.serif, fontSize: 20, fontWeight: '700', color: colors.ink, marginTop: 2 },
+  tileValueDimmed: { color: colors.inkSoft, opacity: 0.5 },
   tileLabel: { ...typography.body, fontSize: 11, color: colors.inkSoft, fontWeight: '600' },
   lockedHint: { ...typography.body, fontSize: 12, color: colors.inkSoft, textAlign: 'center' },
+
+  savingsCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    ...cardStyle, backgroundColor: colors.sageSoft, borderColor: colors.sage,
+  },
+  savingsIconBox: {
+    width: 44, height: 44, borderRadius: 14, backgroundColor: colors.surface,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  savingsText: { flex: 1, gap: 2 },
+  savingsValue: { fontFamily: fontFamilies.serif, fontSize: 24, fontWeight: '700', color: colors.sage },
+  savingsValueUnit: { fontSize: 14, fontWeight: '600' },
+  savingsLabel: { ...typography.body, fontSize: 12, color: colors.ink },
 
   welcomeCard: { ...cardStyle, alignItems: 'center', gap: 6, paddingVertical: 24 },
   welcomeTitle: { ...typography.cardTitle, fontSize: 18, color: colors.ink },

@@ -14,6 +14,9 @@ import DupesScreen from './src/screens/DupesScreen';
 import ShelfScreen from './src/screens/ShelfScreen';
 import ProductDetailScreen from './src/screens/ProductDetailScreen';
 import ProfileEditScreen from './src/screens/ProfileEditScreen';
+import AboutScreen from './src/screens/AboutScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
+import MySubmissionsScreen from './src/screens/MySubmissionsScreen';
 import OnboardingWelcome from './src/screens/onboarding/OnboardingWelcome';
 import OnboardingSkinType from './src/screens/onboarding/OnboardingSkinType';
 import OnboardingConcerns from './src/screens/onboarding/OnboardingConcerns';
@@ -60,6 +63,9 @@ function HomeNavigator() {
       <HomeStack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
       <HomeStack.Screen name="ProductDetail" component={ProductDetailScreen} />
       <HomeStack.Screen name="ProfileEdit" component={ProfileEditScreen} options={{ title: 'Edit Profile' }} />
+      <HomeStack.Screen name="About" component={AboutScreen} options={{ title: 'About' }} />
+      <HomeStack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
+      <HomeStack.Screen name="MySubmissions" component={MySubmissionsScreen} options={{ title: 'My Submissions' }} />
     </HomeStack.Navigator>
   );
 }
@@ -70,6 +76,9 @@ function RoutineNavigator() {
       <RoutineStack.Screen name="Home" component={RoutineScreen} options={{ headerShown: false }} />
       <RoutineStack.Screen name="ProductDetail" component={ProductDetailScreen} />
       <RoutineStack.Screen name="ProfileEdit" component={ProfileEditScreen} options={{ title: 'Edit Profile' }} />
+      <RoutineStack.Screen name="About" component={AboutScreen} options={{ title: 'About' }} />
+      <RoutineStack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
+      <RoutineStack.Screen name="MySubmissions" component={MySubmissionsScreen} options={{ title: 'My Submissions' }} />
     </RoutineStack.Navigator>
   );
 }
@@ -80,6 +89,9 @@ function IngredientsNavigator() {
       <IngredientsStack.Screen name="Home" component={IngredientsScreen} options={{ headerShown: false }} />
       <IngredientsStack.Screen name="ProductDetail" component={ProductDetailScreen} />
       <IngredientsStack.Screen name="ProfileEdit" component={ProfileEditScreen} options={{ title: 'Edit Profile' }} />
+      <IngredientsStack.Screen name="About" component={AboutScreen} options={{ title: 'About' }} />
+      <IngredientsStack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
+      <IngredientsStack.Screen name="MySubmissions" component={MySubmissionsScreen} options={{ title: 'My Submissions' }} />
     </IngredientsStack.Navigator>
   );
 }
@@ -90,6 +102,9 @@ function DupesNavigator() {
       <DupesStack.Screen name="Home" component={DupesScreen} options={{ headerShown: false }} />
       <DupesStack.Screen name="ProductDetail" component={ProductDetailScreen} />
       <DupesStack.Screen name="ProfileEdit" component={ProfileEditScreen} options={{ title: 'Edit Profile' }} />
+      <DupesStack.Screen name="About" component={AboutScreen} options={{ title: 'About' }} />
+      <DupesStack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
+      <DupesStack.Screen name="MySubmissions" component={MySubmissionsScreen} options={{ title: 'My Submissions' }} />
     </DupesStack.Navigator>
   );
 }
@@ -100,6 +115,9 @@ function ShelfNavigator() {
       <ShelfStack.Screen name="Home" component={ShelfScreen} options={{ headerShown: false }} />
       <ShelfStack.Screen name="ProductDetail" component={ProductDetailScreen} />
       <ShelfStack.Screen name="ProfileEdit" component={ProfileEditScreen} options={{ title: 'Edit Profile' }} />
+      <ShelfStack.Screen name="About" component={AboutScreen} options={{ title: 'About' }} />
+      <ShelfStack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
+      <ShelfStack.Screen name="MySubmissions" component={MySubmissionsScreen} options={{ title: 'My Submissions' }} />
     </ShelfStack.Navigator>
   );
 }

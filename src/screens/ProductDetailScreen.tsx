@@ -5,13 +5,15 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { PRODUCTS } from '../data/products';
 import { getCachedProduct } from '../utils/productCache';
-import { findDupes, dupeExplanation } from '../utils/matching';
+import { findDupes, dupeExplanation, matchLabel, LOW_CONFIDENCE_THRESHOLD } from '../utils/matching';
 import { getIngredientFlag, countFlags } from '../utils/ingredientUtils';
 import { CATEGORY_META, IoniconName } from '../components/ProductCard';
+import ScoreRing from '../components/ScoreRing';
+import EmptyState from '../components/EmptyState';
 import { isOnShelf, toggleShelf } from '../utils/shelfStorage';
 import { getPriceOverride, setPriceOverride as savePriceOverride, PriceOverride } from '../utils/priceOverrides';
 import { AppStackParamList, ProductDetailScreenProps } from '../types/navigation';
-import { colors, typography, fontFamilies, cardStyle, scoreColor, scoreBgColor } from '../theme';
+import { colors, typography, fontFamilies, cardStyle, scoreColor } from '../theme';
 import { useToast } from '../context/ToastContext';
 import PressableScale from '../components/PressableScale';
 
@@ -196,6 +198,13 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
       {topDupes.length > 0 && (
         <>
           <Text style={styles.sectionLabel}>Top Alternatives</Text>
+          {!topDupes.some((d) => d.score >= LOW_CONFIDENCE_THRESHOLD) ? (
+            <EmptyState
+              icon="help-circle-outline"
+              title="No strong matches found"
+              description="Nothing in our current catalog shares enough ingredients with this product to call it a real alternative yet."
+            />
+          ) : (
           <View style={styles.dupesCard}>
             {topDupes.map((dupe, i) => {
               const dupeMeta = CATEGORY_META[dupe.product.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
@@ -203,6 +212,7 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
               const priceLabel = (product.price === 0 || dupe.product.price === 0)
                 ? 'No price data'
                 : priceDiff === 0 ? 'Same price' : priceDiff > 0 ? `$${priceDiff} more` : `$${Math.abs(priceDiff)} less`;
+              const isLowConfidence = dupe.score < LOW_CONFIDENCE_THRESHOLD;
               return (
                 <TouchableOpacity
                   key={dupe.product.id}
@@ -217,14 +227,21 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
                     <Text style={styles.dupeName}>{dupe.product.name}</Text>
                     <Text style={styles.dupeBrand}>{dupe.product.brand} · ${dupe.product.price}</Text>
                     <Text style={styles.dupeStat}>{dupeExplanation(dupe)} · {priceLabel}</Text>
+                    {isLowConfidence && (
+                      <Text style={styles.lowConfidenceNote}>
+                        Limited overlap — mainly matches on price or category, not shared actives.
+                      </Text>
+                    )}
                   </View>
-                  <View style={[styles.scorePill, { backgroundColor: scoreBgColor(dupe.score) }]}>
-                    <Text style={[styles.scorePillNum, { color: scoreColor(dupe.score) }]}>{dupe.score}</Text>
+                  <View style={styles.scoreWrap}>
+                    <ScoreRing score={dupe.score} size={44} />
+                    <Text style={[styles.scoreLabel, { color: scoreColor(dupe.score) }]}>{matchLabel(dupe.score)}</Text>
                   </View>
                 </TouchableOpacity>
               );
             })}
           </View>
+          )}
         </>
       )}
 
@@ -369,8 +386,9 @@ const styles = StyleSheet.create({
   dupeName: { ...typography.cardTitle, color: colors.ink },
   dupeBrand: { fontSize: 12, color: colors.inkSoft },
   dupeStat: { fontSize: 11, color: colors.inkSoft, marginTop: 1 },
-  scorePill: { borderRadius: 10, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  scorePillNum: { fontSize: 18, fontWeight: '800' },
+  lowConfidenceNote: { fontSize: 11, color: colors.gold, marginTop: 3, lineHeight: 15 },
+  scoreWrap: { alignItems: 'center', gap: 2 },
+  scoreLabel: { fontSize: 10, fontWeight: '700' },
 });
 
 const modalStyles = StyleSheet.create({

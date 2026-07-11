@@ -7,7 +7,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { PRODUCTS } from '../data/products';
 import { getCachedProduct } from '../utils/productCache';
-import { getShelf, getShelfProduct, toggleShelf } from '../utils/shelfStorage';
+import { getShelf, getShelfProduct, toggleShelf, getShelfStatuses, setShelfStatus, ShelfStatus } from '../utils/shelfStorage';
 import { checkConflicts, DetectedConflict } from '../utils/conflictChecker';
 import { AppStackParamList } from '../types/navigation';
 import ProductCard from '../components/ProductCard';
@@ -110,8 +110,33 @@ function ConflictCard({
   );
 }
 
+function ShelfItemRow({
+  product,
+  onPress,
+  actionLabel,
+  actionIcon,
+  onAction,
+}: {
+  product: Product;
+  onPress: () => void;
+  actionLabel: string;
+  actionIcon: React.ComponentProps<typeof Ionicons>['name'];
+  onAction: () => void;
+}) {
+  return (
+    <View style={styles.itemRow}>
+      <ProductCard product={product} onPress={onPress} />
+      <TouchableOpacity style={styles.statusToggle} onPress={onAction} activeOpacity={0.75}>
+        <Ionicons name={actionIcon} size={13} color={colors.inkSoft} />
+        <Text style={styles.statusToggleText}>{actionLabel}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 export default function ShelfScreen() {
   const [shelfProducts, setShelfProducts] = useState<Product[]>([]);
+  const [statuses, setStatuses] = useState<Record<string, ShelfStatus>>({});
   const navigation = useNavigation<Nav>();
   const { showToast } = useToast();
   const prevConflictCount = useRef(0);
@@ -119,7 +144,7 @@ export default function ShelfScreen() {
   useFocusEffect(
     useCallback(() => {
       async function load() {
-        const ids = await getShelf();
+        const [ids, loadedStatuses] = await Promise.all([getShelf(), getShelfStatuses()]);
         const resolved = await Promise.all(
           ids.map(async (id) =>
             PRODUCTS.find((p) => p.id === id) ??
@@ -128,12 +153,18 @@ export default function ShelfScreen() {
           ),
         );
         setShelfProducts(resolved.filter(Boolean) as Product[]);
+        setStatuses(loadedStatuses);
       }
       load();
     }, []),
   );
 
-  const conflicts = shelfProducts.length >= 2 ? checkConflicts(shelfProducts) : [];
+  const usingProducts = shelfProducts.filter((p) => (statuses[p.id] ?? 'considering') === 'using');
+  const consideringProducts = shelfProducts.filter((p) => (statuses[p.id] ?? 'considering') === 'considering');
+
+  // Conflict-checking only makes sense for products actually in use — a
+  // bookmark someone's just weighing shouldn't trigger a warning.
+  const conflicts = usingProducts.length >= 2 ? checkConflicts(usingProducts) : [];
 
   async function handleRemoveFromShelf(product: Product) {
     await toggleShelf(product);
@@ -143,6 +174,12 @@ export default function ShelfScreen() {
 
   function handleFindAlternative(product: Product) {
     (navigation.getParent()?.navigate as any)('Dupes', { screen: 'Home', params: { productId: product.id } });
+  }
+
+  async function handleToggleStatus(product: Product, newStatus: ShelfStatus) {
+    await setShelfStatus(product.id, newStatus);
+    setStatuses((prev) => ({ ...prev, [product.id]: newStatus }));
+    showToast(newStatus === 'using' ? `${product.name} marked as using` : `${product.name} moved to considering`);
   }
 
   // Only fires when a NEW conflict appears, not on every re-render/refocus
@@ -171,64 +208,96 @@ export default function ShelfScreen() {
           <EmptyState
             icon="bookmark-outline"
             title="Your shelf is empty"
-            description="Open any product and tap the bookmark icon to add it here. Once you have 2+ products, we'll check for ingredient conflicts."
+            description="Open any product and tap the bookmark icon to add it here. Mark it as using once you have 2+ in use, and we'll check for ingredient conflicts."
             action={{ label: 'Browse Products', onPress: () => navigation.getParent()?.navigate('Ingredients' as never) }}
           />
         ) : (
-          <View style={styles.productList}>
-            {shelfProducts.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                onPress={() => navigation.navigate('ProductDetail', { productId: product.id })}
-              />
-            ))}
-          </View>
-        )}
+          <>
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Using ({usingProducts.length})</Text>
+              {usingProducts.length === 0 ? (
+                <Text style={styles.emptyGroupText}>Nothing marked as using yet.</Text>
+              ) : (
+                <View style={styles.productList}>
+                  {usingProducts.map((product) => (
+                    <ShelfItemRow
+                      key={product.id}
+                      product={product}
+                      onPress={() => navigation.navigate('ProductDetail', { productId: product.id })}
+                      actionLabel="Move to considering"
+                      actionIcon="arrow-undo-outline"
+                      onAction={() => handleToggleStatus(product, 'considering')}
+                    />
+                  ))}
+                </View>
+              )}
 
-        {/* Conflict section */}
-        {shelfProducts.length >= 2 && (
-          <View style={styles.conflictSection}>
-            <View style={styles.conflictSectionHeader}>
-              <Text style={styles.sectionLabel}>Conflict Report</Text>
-              <View style={[
-                styles.conflictCount,
-                conflicts.length === 0 ? styles.conflictCountGreen : styles.conflictCountRed,
-              ]}>
-                <Text style={styles.conflictCountText}>
-                  {conflicts.length === 0 ? '✓ Clean' : `${conflicts.length} found`}
-                </Text>
-              </View>
+              {usingProducts.length === 1 && (
+                <View style={styles.needMoreHint}>
+                  <Text style={styles.needMoreText}>
+                    Mark one more product as using to enable conflict checking.
+                  </Text>
+                </View>
+              )}
             </View>
 
-            {conflicts.length === 0 ? (
-              <View style={styles.noConflict}>
-                <Ionicons name="checkmark-circle" size={36} color={colors.sage} />
-                <Text style={styles.noConflictText}>
-                  No conflicts detected between your shelf products. Great choices!
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.conflictList}>
-                {conflicts.map((c, i) => (
-                  <ConflictCard
-                    key={i}
-                    conflict={c}
-                    onRemove={handleRemoveFromShelf}
-                    onFindAlternative={handleFindAlternative}
-                  />
-                ))}
+            {/* Conflict section — only ever runs against products in use */}
+            {usingProducts.length >= 2 && (
+              <View style={styles.conflictSection}>
+                <View style={styles.conflictSectionHeader}>
+                  <Text style={styles.sectionLabel}>Conflict Report</Text>
+                  <View style={[
+                    styles.conflictCount,
+                    conflicts.length === 0 ? styles.conflictCountGreen : styles.conflictCountRed,
+                  ]}>
+                    <Text style={styles.conflictCountText}>
+                      {conflicts.length === 0 ? '✓ Clean' : `${conflicts.length} found`}
+                    </Text>
+                  </View>
+                </View>
+
+                {conflicts.length === 0 ? (
+                  <View style={styles.noConflict}>
+                    <Ionicons name="checkmark-circle" size={36} color={colors.sage} />
+                    <Text style={styles.noConflictText}>
+                      No conflicts detected between the products you're using. Great choices!
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.conflictList}>
+                    {conflicts.map((c, i) => (
+                      <ConflictCard
+                        key={i}
+                        conflict={c}
+                        onRemove={handleRemoveFromShelf}
+                        onFindAlternative={handleFindAlternative}
+                      />
+                    ))}
+                  </View>
+                )}
               </View>
             )}
-          </View>
-        )}
 
-        {shelfProducts.length === 1 && (
-          <View style={styles.needMoreHint}>
-            <Text style={styles.needMoreText}>
-              Add one more product to enable conflict checking.
-            </Text>
-          </View>
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Considering ({consideringProducts.length})</Text>
+              {consideringProducts.length === 0 ? (
+                <Text style={styles.emptyGroupText}>Nothing you're just weighing right now.</Text>
+              ) : (
+                <View style={styles.productList}>
+                  {consideringProducts.map((product) => (
+                    <ShelfItemRow
+                      key={product.id}
+                      product={product}
+                      onPress={() => navigation.navigate('ProductDetail', { productId: product.id })}
+                      actionLabel="Mark as using"
+                      actionIcon="checkmark-circle-outline"
+                      onAction={() => handleToggleStatus(product, 'using')}
+                    />
+                  ))}
+                </View>
+              )}
+            </View>
+          </>
         )}
 
       </ScrollView>
@@ -244,7 +313,17 @@ const styles = StyleSheet.create({
   title: { ...typography.screenTitle, color: colors.ink },
   subtitle: { ...typography.body, color: colors.inkSoft },
 
+  section: { gap: 10 },
   productList: { gap: 10 },
+  emptyGroupText: { fontSize: 13, color: colors.inkSoft, fontStyle: 'italic' },
+
+  itemRow: { gap: 6 },
+  statusToggle: {
+    flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start',
+    borderRadius: 8, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.paper,
+    paddingHorizontal: 10, paddingVertical: 5,
+  },
+  statusToggleText: { fontSize: 11, fontWeight: '600', color: colors.inkSoft },
 
   conflictSection: { gap: 12 },
   conflictSectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
