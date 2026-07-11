@@ -78,7 +78,7 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
     if (added) {
       showToast('Added to your list', {
         label: 'View Shelf',
-        onPress: () => innerNav.getParent()?.navigate('My Shelf' as never),
+        onPress: () => (innerNav.getParent()?.navigate as any)('Settings', { screen: 'Shelf', initial: false }),
       });
     } else {
       showToast('Removed from your shelf');

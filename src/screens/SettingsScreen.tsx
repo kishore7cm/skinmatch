@@ -30,6 +30,8 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
 
+        <Text style={styles.title}>Settings</Text>
+
         <View style={styles.group}>
           <TouchableOpacity style={styles.row} onPress={() => navigation.navigate('ProfileEdit')} activeOpacity={0.75}>
             <View style={[styles.iconBox, { backgroundColor: colors.sageSoft }]}>
@@ -38,6 +40,17 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
             <View style={styles.rowText}>
               <Text style={styles.rowTitle}>Edit Profile</Text>
               <Text style={styles.rowDesc}>Skin type, concerns, and preferences</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.inkSoft} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.row} onPress={() => navigation.navigate('Shelf')} activeOpacity={0.75}>
+            <View style={[styles.iconBox, { backgroundColor: colors.sageSoft }]}>
+              <Ionicons name="bookmark-outline" size={20} color={colors.sage} />
+            </View>
+            <View style={styles.rowText}>
+              <Text style={styles.rowTitle}>My Shelf</Text>
+              <Text style={styles.rowDesc}>Saved products and conflict checks</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.inkSoft} />
           </TouchableOpacity>
@@ -88,6 +101,8 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
   content: { padding: 20, gap: 20 },
+
+  title: { ...typography.screenTitle, color: colors.ink },
 
   group: { gap: 10 },
   row: {

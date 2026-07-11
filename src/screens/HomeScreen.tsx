@@ -68,6 +68,13 @@ export default function HomeScreen() {
     navigation.getParent()?.navigate(tab as never);
   }
 
+  // My Shelf now lives inside Settings rather than its own tab. initial:
+  // false keeps the Settings root underneath Shelf in history, so back
+  // navigation (and the header back arrow) works instead of dead-ending.
+  function goToShelf() {
+    (navigation.getParent()?.navigate as any)('Settings', { screen: 'Shelf', initial: false });
+  }
+
   if (!loaded) return null;
 
   if (!skinType) {
@@ -203,19 +210,14 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
-        <View style={styles.headerRow}>
-          <View style={styles.header}>
-            <View style={styles.brandRow}>
-              <Ionicons name="sparkles" size={20} color={colors.sage} />
-              <Text style={styles.brandLogo}>SkinMatch</Text>
-            </View>
-            <Text style={styles.brandSub}>
-              {skinType.charAt(0).toUpperCase() + skinType.slice(1)} skin · your skincare at a glance
-            </Text>
+        <View style={styles.header}>
+          <View style={styles.brandRow}>
+            <Ionicons name="sparkles" size={20} color={colors.sage} />
+            <Text style={styles.brandLogo}>SkinMatch</Text>
           </View>
-          <TouchableOpacity style={styles.settingsBtn} onPress={() => navigation.navigate('Settings')}>
-            <Ionicons name="settings-outline" size={22} color={colors.inkSoft} />
-          </TouchableOpacity>
+          <Text style={styles.brandSub}>
+            {skinType.charAt(0).toUpperCase() + skinType.slice(1)} skin · your skincare at a glance
+          </Text>
         </View>
 
         {isFirstWeek ? (
@@ -303,7 +305,7 @@ export default function HomeScreen() {
                 <Text style={styles.tileLabel}>routine caution{cautions.length !== 1 ? 's' : ''}</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.tile} onPress={() => goToTab('My Shelf')} activeOpacity={0.85}>
+              <TouchableOpacity style={styles.tile} onPress={goToShelf} activeOpacity={0.85}>
                 <View style={[styles.tileIconBox, { backgroundColor: conflicts.length > 0 ? colors.claySoft : colors.sageSoft }]}>
                   <Ionicons
                     name={usingProducts.length < 2 ? 'bookmark-outline' : conflicts.length > 0 ? 'alert-circle-outline' : 'shield-checkmark-outline'}
@@ -361,14 +363,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
   content: { padding: 20, paddingBottom: 40, gap: 20 },
 
-  headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  header: { gap: 4, flex: 1 },
+  header: { gap: 4 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   brandLogo: { ...typography.screenTitle, color: colors.ink },
-  settingsBtn: {
-    width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surface,
-    alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.line,
-  },
   brandSub: { ...typography.body, color: colors.inkSoft },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },

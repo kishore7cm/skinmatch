@@ -32,7 +32,7 @@ const OnboardingStack  = createNativeStackNavigator<OnboardingStackParamList>();
 const HomeStack        = createNativeStackNavigator<AppStackParamList>();
 const RoutineStack     = createNativeStackNavigator<AppStackParamList>();
 const IngredientsStack = createNativeStackNavigator<AppStackParamList>();
-const ShelfStack       = createNativeStackNavigator<AppStackParamList>();
+const SettingsStack    = createNativeStackNavigator<AppStackParamList>();
 
 const STACK_OPTIONS = {
   headerStyle: { backgroundColor: colors.paper },
@@ -60,10 +60,6 @@ function HomeNavigator() {
     <HomeStack.Navigator screenOptions={STACK_OPTIONS}>
       <HomeStack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
       <HomeStack.Screen name="ProductDetail" component={ProductDetailScreen} />
-      <HomeStack.Screen name="ProfileEdit" component={ProfileEditScreen} options={{ title: 'Edit Profile' }} />
-      <HomeStack.Screen name="About" component={AboutScreen} options={{ title: 'About' }} />
-      <HomeStack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
-      <HomeStack.Screen name="MySubmissions" component={MySubmissionsScreen} options={{ title: 'My Submissions' }} />
     </HomeStack.Navigator>
   );
 }
@@ -74,9 +70,6 @@ function RoutineNavigator() {
       <RoutineStack.Screen name="Home" component={RoutineScreen} options={{ headerShown: false }} />
       <RoutineStack.Screen name="ProductDetail" component={ProductDetailScreen} />
       <RoutineStack.Screen name="ProfileEdit" component={ProfileEditScreen} options={{ title: 'Edit Profile' }} />
-      <RoutineStack.Screen name="About" component={AboutScreen} options={{ title: 'About' }} />
-      <RoutineStack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
-      <RoutineStack.Screen name="MySubmissions" component={MySubmissionsScreen} options={{ title: 'My Submissions' }} />
     </RoutineStack.Navigator>
   );
 }
@@ -86,24 +79,20 @@ function IngredientsNavigator() {
     <IngredientsStack.Navigator screenOptions={STACK_OPTIONS}>
       <IngredientsStack.Screen name="Home" component={IngredientsScreen} options={{ headerShown: false }} />
       <IngredientsStack.Screen name="ProductDetail" component={ProductDetailScreen} />
-      <IngredientsStack.Screen name="ProfileEdit" component={ProfileEditScreen} options={{ title: 'Edit Profile' }} />
-      <IngredientsStack.Screen name="About" component={AboutScreen} options={{ title: 'About' }} />
-      <IngredientsStack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
-      <IngredientsStack.Screen name="MySubmissions" component={MySubmissionsScreen} options={{ title: 'My Submissions' }} />
     </IngredientsStack.Navigator>
   );
 }
 
-function ShelfNavigator() {
+function SettingsNavigator() {
   return (
-    <ShelfStack.Navigator screenOptions={STACK_OPTIONS}>
-      <ShelfStack.Screen name="Home" component={ShelfScreen} options={{ headerShown: false }} />
-      <ShelfStack.Screen name="ProductDetail" component={ProductDetailScreen} />
-      <ShelfStack.Screen name="ProfileEdit" component={ProfileEditScreen} options={{ title: 'Edit Profile' }} />
-      <ShelfStack.Screen name="About" component={AboutScreen} options={{ title: 'About' }} />
-      <ShelfStack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
-      <ShelfStack.Screen name="MySubmissions" component={MySubmissionsScreen} options={{ title: 'My Submissions' }} />
-    </ShelfStack.Navigator>
+    <SettingsStack.Navigator screenOptions={STACK_OPTIONS}>
+      <SettingsStack.Screen name="Settings" component={SettingsScreen} options={{ headerShown: false }} />
+      <SettingsStack.Screen name="ProfileEdit" component={ProfileEditScreen} options={{ title: 'Edit Profile' }} />
+      <SettingsStack.Screen name="About" component={AboutScreen} options={{ title: 'About' }} />
+      <SettingsStack.Screen name="MySubmissions" component={MySubmissionsScreen} options={{ title: 'My Submissions' }} />
+      <SettingsStack.Screen name="Shelf" component={ShelfScreen} options={{ title: 'My Shelf' }} />
+      <SettingsStack.Screen name="ProductDetail" component={ProductDetailScreen} />
+    </SettingsStack.Navigator>
   );
 }
 
@@ -114,7 +103,7 @@ const TAB_META: Record<string, IoniconName> = {
   Home:        'home',
   Routine:     'clipboard',
   Ingredients: 'flask',
-  'My Shelf':  'bookmark',
+  Settings:    'settings',
 };
 
 function MainTabs() {
@@ -143,7 +132,7 @@ function MainTabs() {
       <Tab.Screen name="Home"        component={HomeNavigator} />
       <Tab.Screen name="Routine"     component={RoutineNavigator} />
       <Tab.Screen name="Ingredients" component={IngredientsNavigator} options={{ tabBarLabel: 'Products' }} />
-      <Tab.Screen name="My Shelf"    component={ShelfNavigator} />
+      <Tab.Screen name="Settings"    component={SettingsNavigator} />
     </Tab.Navigator>
   );
 }

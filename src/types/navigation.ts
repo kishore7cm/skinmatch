@@ -14,6 +14,7 @@ export type AppStackParamList = {
   About: undefined;
   Settings: undefined;
   MySubmissions: undefined;
+  Shelf: undefined;
 };
 
 export type ProductDetailScreenProps = NativeStackScreenProps<AppStackParamList, 'ProductDetail'>;

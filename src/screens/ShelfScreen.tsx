@@ -195,14 +195,11 @@ export default function ShelfScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
-        <View style={styles.topBar}>
-          <Text style={styles.title}>My Shelf</Text>
-          <Text style={styles.subtitle}>
-            {shelfProducts.length === 0
-              ? 'Save products from their detail page'
-              : `${shelfProducts.length} product${shelfProducts.length !== 1 ? 's' : ''} saved`}
-          </Text>
-        </View>
+        <Text style={styles.subtitle}>
+          {shelfProducts.length === 0
+            ? 'Save products from their detail page'
+            : `${shelfProducts.length} product${shelfProducts.length !== 1 ? 's' : ''} saved`}
+        </Text>
 
         {shelfProducts.length === 0 ? (
           <EmptyState
@@ -309,8 +306,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
   content: { padding: 16, paddingBottom: 40, gap: 16 },
 
-  topBar: { gap: 2 },
-  title: { ...typography.screenTitle, color: colors.ink },
   subtitle: { ...typography.body, color: colors.inkSoft },
 
   section: { gap: 10 },
