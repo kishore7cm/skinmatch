@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { PRODUCTS } from '../data/products';
 import { findDupes, dupeExplanation, DupeResult } from '../utils/matching';
 import { AppStackParamList } from '../types/navigation';
-import ProductCard, { CATEGORY_META, IoniconName } from '../components/ProductCard';
+import ProductCard, { CATEGORY_META } from '../components/ProductCard';
 import { Product } from '../types';
 import { searchBeautyProducts } from '../api/openBeautyFacts';
 import { mapOBFProducts } from '../utils/productMapper';
@@ -18,7 +18,7 @@ import { getShelfProduct } from '../utils/shelfStorage';
 import { getApprovedSubmissions } from '../api/submissions';
 import BarcodeScanner from '../components/BarcodeScanner';
 import EmptyState from '../components/EmptyState';
-import { colors, typography, cardStyle } from '../theme';
+import { colors, typography } from '../theme';
 
 type Nav = NativeStackNavigationProp<AppStackParamList>;
 type Route = RouteProp<AppStackParamList, 'Home'>;
@@ -96,7 +96,7 @@ export default function DupesScreen() {
     };
   }, [query]);
 
-  // Products shown in the picker strip
+  // Products shown in the browse list
   const pickerProducts = useMemo(() => {
     if (isApiMode) return apiProducts;
     const q = query.toLowerCase();
@@ -118,14 +118,6 @@ export default function DupesScreen() {
     () => (selected ? findDupes(selected, candidatePool) : []),
     [selected, candidatePool],
   );
-
-  const selectedIsVisible = selected
-    ? pickerProducts.some((p) => p.id === selected.id)
-    : false;
-
-  function priceLabel(p: Product) {
-    return p.price > 0 ? `$${p.price}` : '–';
-  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -209,120 +201,83 @@ export default function DupesScreen() {
         </ScrollView>
       )}
 
-      {/* API status label */}
-      {isApiMode && !isLoading && apiProducts.length > 0 && (
-        <Text style={styles.apiLabel}>{apiProducts.length} results from Open Beauty Facts</Text>
+      {/* Results count */}
+      {isApiMode ? (
+        !isLoading && apiProducts.length > 0 && (
+          <Text style={styles.resultsCount}>{apiProducts.length} results from Open Beauty Facts</Text>
+        )
+      ) : (
+        <Text style={styles.resultsCount}>
+          {pickerProducts.length} product{pickerProducts.length !== 1 ? 's' : ''} · tap one to compare
+        </Text>
       )}
 
-      {/* Product picker strip */}
-      {pickerProducts.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.pickerScroll}
-          contentContainerStyle={styles.pickerRow}
-        >
-          {pickerProducts.map((p) => {
-            const meta = CATEGORY_META[p.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
-            const isActive = selected?.id === p.id;
-            const hasIngredients = p.ingredients.length >= 2;
-            return (
-              <TouchableOpacity
-                key={p.id}
-                style={[
-                  styles.pickerChip,
-                  { borderColor: hasIngredients ? meta.color : colors.line },
-                  isActive && { backgroundColor: colors.sage, borderColor: colors.sage },
-                  !hasIngredients && styles.pickerChipNoData,
-                ]}
-                onPress={() => hasIngredients && setSelected(isActive ? null : p)}
-                activeOpacity={hasIngredients ? 0.75 : 1}
-              >
-                <Ionicons name={meta.icon} size={17} color={isActive ? colors.surface : meta.color} style={styles.pickerIcon} />
-                <Text style={[styles.pickerName, isActive && styles.pickerNameActive, !hasIngredients && styles.pickerNameDim]} numberOfLines={2}>
-                  {p.name}
-                </Text>
-                {hasIngredients ? (
-                  <Text style={[styles.pickerBrand, isActive && styles.pickerBrandActive]}>
-                    {p.brand} · {priceLabel(p)}
-                  </Text>
-                ) : (
-                  <Text style={styles.pickerNoData}>No ingredient data</Text>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      )}
-
-      {/* Source card */}
-      {selected && selectedIsVisible && (
-        <TouchableOpacity
-          style={styles.sourceCard}
-          onPress={() => navigation.navigate('ProductDetail', { productId: selected.id })}
-          activeOpacity={0.85}
-        >
-          <View style={styles.sourceLeft}>
-            <Text style={styles.sourceLabel}>Comparing</Text>
-            <Text style={styles.sourceName}>{selected.name}</Text>
-            <Text style={styles.sourceMeta}>
-              {selected.brand}
-              {selected.price > 0 ? ` · $${selected.price}` : ''}
-              {' · '}{selected.ingredients.length} ingredients
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={22} color={colors.sage} />
-        </TouchableOpacity>
-      )}
-
-      {/* Dupes list */}
-      {selected && selectedIsVisible ? (
-        <FlatList
-          data={dupes}
-          keyExtractor={(item) => item.product.id}
-          contentContainerStyle={styles.list}
-          ListHeaderComponent={
-            <Text style={styles.resultsLabel}>
-              {dupes.length} alternatives · sorted by match score
-            </Text>
-          }
-          ListEmptyComponent={
-            <EmptyState
-              icon="help-circle-outline"
-              title="No alternatives found"
-              description="Search for more products in the same category to compare against."
-            />
-          }
-          renderItem={({ item }) => (
-            <ProductCard
-              product={item.product}
-              onPress={() => navigation.navigate('ProductDetail', { productId: item.product.id })}
-              score={item.score}
-              scoreLabel={item.score >= 70 ? 'Great' : item.score >= 40 ? 'Decent' : 'Low'}
-              subtitle={dupeExplanation(item)}
-            />
-          )}
-        />
-      ) : isLoading ? (
+      {/* Browse list — tapping a product expands its alternatives inline */}
+      {isLoading ? (
         <View style={styles.emptyState}>
           <ActivityIndicator size="large" color={colors.sage} />
           <Text style={styles.emptyDesc}>Searching Open Beauty Facts…</Text>
         </View>
-      ) : pickerProducts.length === 0 ? (
-        <EmptyState
-          icon="search-outline"
-          title="No products found"
-          description="Try a different search or category."
-        />
       ) : (
-        <EmptyState
-          icon="swap-horizontal-outline"
-          title="Pick a product to compare"
-          description={
-            isApiMode
-              ? 'Tap a product in the strip above to find its closest ingredient matches.'
-              : 'Search or filter above, then tap a product in the strip to find its best-matched alternatives.'
+        <FlatList
+          data={pickerProducts}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          keyboardShouldPersistTaps="handled"
+          ListEmptyComponent={
+            <EmptyState
+              icon="search-outline"
+              title="No products found"
+              description="Try a different search or category."
+            />
           }
+          renderItem={({ item }) => {
+            const hasIngredients = item.ingredients.length >= 2;
+            const isExpanded = selected?.id === item.id;
+            return (
+              <View>
+                <View style={[isExpanded && styles.productExpanded, !hasIngredients && styles.productDim]}>
+                  <ProductCard
+                    product={item}
+                    onPress={() => { if (hasIngredients) setSelected(isExpanded ? null : item); }}
+                    subtitle={hasIngredients ? undefined : 'No ingredient data'}
+                  />
+                </View>
+
+                {isExpanded && (
+                  <View style={styles.dupeSection}>
+                    <View style={styles.dupeSectionHeader}>
+                      <Text style={styles.dupeSectionLabel}>
+                        {dupes.length} alternative{dupes.length !== 1 ? 's' : ''} · sorted by match score
+                      </Text>
+                      <TouchableOpacity onPress={() => navigation.navigate('ProductDetail', { productId: item.id })}>
+                        <Text style={styles.viewDetailsLink}>View details</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {dupes.length === 0 ? (
+                      <EmptyState
+                        icon="help-circle-outline"
+                        title="No alternatives found"
+                        description="Search for more products in the same category to compare against."
+                      />
+                    ) : (
+                      dupes.map((d) => (
+                        <ProductCard
+                          key={d.product.id}
+                          product={d.product}
+                          onPress={() => navigation.navigate('ProductDetail', { productId: d.product.id })}
+                          score={d.score}
+                          scoreLabel={d.score >= 70 ? 'Great' : d.score >= 40 ? 'Decent' : 'Low'}
+                          subtitle={dupeExplanation(d)}
+                        />
+                      ))
+                    )}
+                  </View>
+                )}
+              </View>
+            );
+          }}
         />
       )}
     </SafeAreaView>
@@ -347,9 +302,8 @@ const styles = StyleSheet.create({
   scanBtn: { padding: 4, marginLeft: 4 },
 
   // flexShrink: 0 on the ScrollView itself (not just its content container)
-  // stops it from being compressed once later siblings (the source card, the
-  // results list) push total column content past the available height —
-  // otherwise the strip clips instead of just scrolling horizontally.
+  // stops it from being compressed once later siblings push total column
+  // content past the available height.
   filterScroll: { flexShrink: 0 },
   // alignItems: 'flex-start' overrides the horizontal ScrollView's default
   // row stretch, which otherwise forces every chip to match the tallest
@@ -365,39 +319,24 @@ const styles = StyleSheet.create({
   filterChipText: { fontSize: 12, fontWeight: '600', color: colors.inkSoft },
   filterChipTextAll: { color: colors.sage },
 
-  apiLabel: { fontSize: 12, color: colors.inkSoft, fontWeight: '600', paddingHorizontal: 16, marginBottom: 6 },
+  resultsCount: { fontSize: 12, color: colors.inkSoft, fontWeight: '600', paddingHorizontal: 16, marginBottom: 6 },
 
-  // alignItems: 'flex-start' overrides the horizontal ScrollView's default
-  // row stretch, which otherwise forces every card to match the tallest
-  // sibling's height, leaving dead space below shorter cards' content.
-  pickerScroll: { flexShrink: 0 },
-  pickerRow: { paddingHorizontal: 16, paddingBottom: 10, gap: 10, alignItems: 'flex-start' },
-  pickerChip: {
-    borderWidth: 1.5, borderRadius: 14, padding: 12, width: 140,
-    backgroundColor: colors.surface, gap: 3,
-  },
-  pickerIcon: { marginBottom: 2 },
-  pickerName: { ...typography.cardTitle, fontSize: 12, color: colors.ink, lineHeight: 16 },
-  pickerNameActive: { color: colors.surface },
-  pickerBrand: { fontSize: 11, color: colors.inkSoft },
-  pickerBrandActive: { color: 'rgba(255,255,255,0.8)' },
-  pickerChipNoData: { opacity: 0.5 },
-  pickerNameDim: { color: colors.inkSoft },
-  pickerNoData: { fontSize: 10, color: colors.inkSoft, fontStyle: 'italic' },
-
-  sourceCard: {
-    marginHorizontal: 16, marginBottom: 8,
-    ...cardStyle, padding: 14,
-    flexDirection: 'row', alignItems: 'center',
-    borderLeftWidth: 4, borderLeftColor: colors.sage,
-  },
-  sourceLeft: { flex: 1 },
-  sourceLabel: { ...typography.eyebrow, fontSize: 10, color: colors.sage, marginBottom: 2 },
-  sourceName: { ...typography.cardTitle, color: colors.ink },
-  sourceMeta: { fontSize: 12, color: colors.inkSoft, marginTop: 2 },
-
-  resultsLabel: { fontSize: 12, fontWeight: '600', color: colors.inkSoft, marginBottom: 10 },
   list: { paddingHorizontal: 16, paddingBottom: 30, gap: 10 },
+
+  // A left accent border marks which product's alternatives are currently
+  // expanded, mirroring the "Comparing" source-card treatment this replaced.
+  productExpanded: {
+    borderLeftWidth: 4, borderLeftColor: colors.sage, borderRadius: 4,
+    marginLeft: -8, paddingLeft: 8,
+  },
+  productDim: { opacity: 0.5 },
+
+  dupeSection: { marginTop: 10, paddingLeft: 12, gap: 10 },
+  dupeSectionHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2,
+  },
+  dupeSectionLabel: { fontSize: 12, fontWeight: '600', color: colors.inkSoft },
+  viewDetailsLink: { fontSize: 12, fontWeight: '700', color: colors.sage },
 
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 10 },
   emptyDesc: { ...typography.body, color: colors.inkSoft, textAlign: 'center', lineHeight: 20 },
