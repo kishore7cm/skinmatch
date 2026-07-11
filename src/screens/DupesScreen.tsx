@@ -179,6 +179,7 @@ export default function DupesScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={styles.filterScroll}
           contentContainerStyle={styles.filterRow}
         >
           {CATEGORIES.map((cat) => {
@@ -218,6 +219,7 @@ export default function DupesScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={styles.pickerScroll}
           contentContainerStyle={styles.pickerRow}
         >
           {pickerProducts.map((p) => {
@@ -344,7 +346,15 @@ const styles = StyleSheet.create({
   input: { flex: 1, paddingVertical: 13, fontSize: 15, color: colors.ink },
   scanBtn: { padding: 4, marginLeft: 4 },
 
-  filterRow: { paddingHorizontal: 16, paddingBottom: 10, gap: 8 },
+  // flexShrink: 0 on the ScrollView itself (not just its content container)
+  // stops it from being compressed once later siblings (the source card, the
+  // results list) push total column content past the available height —
+  // otherwise the strip clips instead of just scrolling horizontally.
+  filterScroll: { flexShrink: 0 },
+  // alignItems: 'flex-start' overrides the horizontal ScrollView's default
+  // row stretch, which otherwise forces every chip to match the tallest
+  // sibling's height, ballooning them into tall cards instead of pills.
+  filterRow: { paddingHorizontal: 16, paddingBottom: 10, gap: 8, alignItems: 'flex-start' },
   filterChip: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 12, paddingVertical: 7,
@@ -360,6 +370,7 @@ const styles = StyleSheet.create({
   // alignItems: 'flex-start' overrides the horizontal ScrollView's default
   // row stretch, which otherwise forces every card to match the tallest
   // sibling's height, leaving dead space below shorter cards' content.
+  pickerScroll: { flexShrink: 0 },
   pickerRow: { paddingHorizontal: 16, paddingBottom: 10, gap: 10, alignItems: 'flex-start' },
   pickerChip: {
     borderWidth: 1.5, borderRadius: 14, padding: 12, width: 140,
