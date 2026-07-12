@@ -13,7 +13,6 @@ import { PRODUCTS } from '../data/products';
 import { getShelf, getShelfProduct, ensureOnShelfAsUsing, setShelfStatus } from '../utils/shelfStorage';
 import { getCachedProduct } from '../utils/productCache';
 import { getAssignments, setAssignment, removeAssignment, Assignment, AssignmentSource } from '../utils/routineAssignments';
-import { checkConcernCoverage, checkSkinTypeCautions } from '../utils/routineFit';
 import { routineMonthlyCost, RoutineCostLine, RoutineCostSummary } from '../utils/routineCost';
 import { recommendForStep, RecommendationPreferences, scorePreferenceFit, categoryMedianPrice } from '../utils/routineRecommendations';
 import { findDupes, dupeExplanation, matchLabel, LOW_CONFIDENCE_THRESHOLD } from '../utils/matching';
@@ -165,12 +164,6 @@ export default function RoutineScreen() {
   const assignedList = Object.entries(assignments)
     .map(([stepType, assignment]) => ({ stepType, product: resolveAssignedProduct(assignment.productId) }))
     .filter((a): a is { stepType: string; product: Product } => !!a.product);
-
-  const concernCoverage = activeConcerns.length > 0
-    ? checkConcernCoverage(activeConcerns, assignedList.map((a) => a.product))
-    : [];
-  const cautions = skinType ? checkSkinTypeCautions(skinType, assignedList) : [];
-  const showFitSection = assignedList.length > 0 && (concernCoverage.length > 0 || cautions.length > 0);
 
   const costSummary = routine
     ? routineMonthlyCost(
@@ -420,77 +413,6 @@ export default function RoutineScreen() {
           </View>
         )}
 
-        {/* Routine Fit */}
-        {showFitSection && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Routine Fit</Text>
-            <Text style={styles.sectionSubtitle}>How well your picks match your skin</Text>
-
-            {concernCoverage.length > 0 && (
-              <View style={styles.fitCard}>
-                {concernCoverage.map(({ concern, covered, matchedProduct, matchedIngredient }, i) => (
-                  <View
-                    key={concern.id}
-                    style={[styles.fitRow, i < concernCoverage.length - 1 && styles.fitRowBorder]}
-                  >
-                    <Ionicons
-                      name={covered ? 'checkmark-circle' : 'alert-circle-outline'}
-                      size={18}
-                      color={covered ? colors.sage : colors.gold}
-                    />
-                    <View style={styles.fitRowText}>
-                      <Text style={styles.fitRowTitle}>{concern.label}</Text>
-                      <Text style={styles.fitRowDesc}>
-                        {covered
-                          ? `Covered by ${matchedProduct!.name} (${matchedIngredient})`
-                          : `No assigned product has ${concern.keyIngredient} yet`}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {cautions.length > 0 && (
-              <View style={[styles.fitCard, concernCoverage.length > 0 && { marginTop: 10 }]}>
-                {cautions.map((c, i) => (
-                  <View
-                    key={`${c.product.id}-${c.type}`}
-                    style={[styles.fitRow, i < cautions.length - 1 && styles.fitRowBorder]}
-                  >
-                    <Ionicons
-                      name="warning-outline"
-                      size={18}
-                      color={c.type === 'comedogenic' ? colors.clay : colors.gold}
-                    />
-                    <View style={styles.fitRowText}>
-                      <Text style={styles.fitRowTitle}>
-                        {STEP_TYPE_LABELS[c.stepType] ?? c.stepType}: {c.product.name}
-                      </Text>
-                      <Text style={styles.fitRowDesc}>
-                        Contains {c.ingredients.join(', ')} — {c.type === 'comedogenic' ? 'pore-clogging' : 'a common irritant'} for {skinType} skin
-                      </Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* Targeted Treatments */}
-        {activeConcerns.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Targeted Treatments</Text>
-            <Text style={styles.sectionSubtitle}>
-              Based on your {activeConcerns.length} selected concern{activeConcerns.length !== 1 ? 's' : ''}
-            </Text>
-            {activeConcerns.map((concern) => (
-              <ConcernCard key={concern.id} concern={concern} colors={colors} styles={styles} />
-            ))}
-          </View>
-        )}
-
         {!skinType && (
           <Text style={styles.hint}>Select your skin type above to see your routine.</Text>
         )}
@@ -506,57 +428,6 @@ export default function RoutineScreen() {
         onClose={() => setPickerStep(null)}
       />
     </SafeAreaView>
-  );
-}
-
-function ConcernCard({
-  concern, colors, styles,
-}: { concern: Concern; colors: ColorTokens; styles: Styles }) {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <TouchableOpacity
-      style={styles.concernCard}
-      onPress={() => setExpanded((v) => !v)}
-      activeOpacity={0.85}
-    >
-      <View style={styles.concernCardHeader}>
-        <View style={styles.concernCardLeft}>
-          <View style={styles.concernCardIconBox}>
-            <Ionicons name={concern.icon} size={22} color={colors.sage} />
-          </View>
-          <View>
-            <Text style={styles.concernCardLabel}>{concern.label}</Text>
-            <Text style={styles.concernKeyIng}>Key ingredient: {concern.keyIngredient}</Text>
-          </View>
-        </View>
-        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.inkSoft} />
-      </View>
-      {expanded && (
-        <View style={styles.concernCardBody}>
-          <View style={styles.tipRow}>
-            <View style={[styles.tipBadge, { backgroundColor: colors.goldSoft }]}>
-              <Ionicons name="sunny-outline" size={12} color={colors.inkSoft} />
-              <Text style={styles.tipBadgeText}>AM</Text>
-            </View>
-            <Text style={styles.tipText}>{concern.amTip}</Text>
-          </View>
-          <View style={styles.tipRow}>
-            <View style={[styles.tipBadge, { backgroundColor: colors.sageSoft }]}>
-              <Ionicons name="moon-outline" size={12} color={colors.inkSoft} />
-              <Text style={styles.tipBadgeText}>PM</Text>
-            </View>
-            <Text style={styles.tipText}>{concern.pmTip}</Text>
-          </View>
-          <View style={styles.avoidBox}>
-            <View style={styles.avoidLabelRow}>
-              <Ionicons name="warning-outline" size={12} color={colors.clay} />
-              <Text style={styles.avoidLabel}>Avoid</Text>
-            </View>
-            <Text style={styles.avoidText}>{concern.avoid}</Text>
-          </View>
-        </View>
-      )}
-    </TouchableOpacity>
   );
 }
 
@@ -876,14 +747,6 @@ const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.crea
 
   section: { gap: 12 },
   sectionTitle: { ...typography.screenTitle, fontSize: 20, color: colors.ink },
-  sectionSubtitle: { ...typography.body, color: colors.inkSoft, marginTop: -6 },
-
-  fitCard: { ...cardStyle, padding: 0, overflow: 'hidden' },
-  fitRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 14 },
-  fitRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.line },
-  fitRowText: { flex: 1, gap: 2 },
-  fitRowTitle: { ...typography.bodyStrong, color: colors.ink },
-  fitRowDesc: { fontSize: 12, color: colors.inkSoft, lineHeight: 17 },
 
   steps: { gap: 12 },
   stepCard: { ...cardStyle, gap: 10 },
@@ -955,31 +818,6 @@ const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.crea
   manualBadgeText: { fontSize: 11, fontWeight: '700', color: colors.gold },
   manualBadgeDesc: { fontSize: 11, color: colors.inkSoft, lineHeight: 15 },
   autoNote: { fontSize: 11, color: colors.inkSoft },
-
-  concernCard: { ...cardStyle },
-  concernCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  concernCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  concernCardIconBox: {
-    width: 44, height: 44, borderRadius: 13, backgroundColor: colors.sageSoft,
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  concernCardLabel: { ...typography.cardTitle, color: colors.ink },
-  concernKeyIng: { fontSize: 12, color: colors.inkSoft, marginTop: 2 },
-  concernCardBody: { marginTop: 14, gap: 10 },
-  tipRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
-  tipBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, flexShrink: 0,
-  },
-  tipBadgeText: { fontSize: 11, fontWeight: '700', color: colors.inkSoft },
-  tipText: { ...typography.body, color: colors.inkSoft, lineHeight: 19, flex: 1 },
-  avoidBox: {
-    backgroundColor: colors.claySoft, borderRadius: 10, padding: 12, gap: 4,
-    borderLeftWidth: 3, borderLeftColor: colors.clay,
-  },
-  avoidLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  avoidLabel: { fontSize: 12, fontWeight: '700', color: colors.clay },
-  avoidText: { fontSize: 12, color: colors.inkSoft, lineHeight: 17 },
 
   hint: { textAlign: 'center', color: colors.inkSoft, fontSize: 14 },
 

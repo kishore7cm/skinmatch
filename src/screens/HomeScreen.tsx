@@ -5,7 +5,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { AppStackParamList } from '../types/navigation';
 import { SkinType, Product } from '../types';
-import { ROUTINES, STEP_CATEGORY } from '../data/routines';
+import { ROUTINES, STEP_CATEGORY, STEP_TYPE_LABELS } from '../data/routines';
 import { CONCERNS } from '../data/concerns';
 import { getProfile } from '../utils/profileStorage';
 import { PRODUCTS } from '../data/products';
@@ -28,6 +28,7 @@ export default function HomeScreen() {
   const [assignments, setAssignments] = useState<Record<string, Assignment>>({});
   const [shelfProducts, setShelfProducts] = useState<Product[]>([]);
   const [shelfStatuses, setShelfStatuses] = useState<Record<string, ShelfStatus>>({});
+  const [expandedDetail, setExpandedDetail] = useState<'concerns' | 'cautions' | null>(null);
   const navigation = useNavigation<Nav>();
 
   useFocusEffect(
@@ -75,6 +76,18 @@ export default function HomeScreen() {
   // navigation (and the header back arrow) works instead of dead-ending.
   function goToShelf() {
     (navigation.getParent()?.navigate as any)('Settings', { screen: 'Shelf', initial: false });
+  }
+
+  // Routine no longer has a dedicated "Routine Fit" section explaining these
+  // two stats — the explanation now lives here, inline, so the fraction/count
+  // is never just a bare unexplained number.
+  function handleConcernsTilePress() {
+    if (activeConcerns.length === 0) { goToTab('Routine'); return; }
+    setExpandedDetail((d) => (d === 'concerns' ? null : 'concerns'));
+  }
+  function handleCautionsTilePress() {
+    if (cautions.length === 0) { goToTab('Routine'); return; }
+    setExpandedDetail((d) => (d === 'cautions' ? null : 'cautions'));
   }
 
   if (!loaded) return null;
@@ -287,10 +300,16 @@ export default function HomeScreen() {
                 <Text style={styles.tileLabel}>{hasCost ? 'per month' : 'No products assigned yet'}</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.tile} onPress={() => goToTab('Routine')} activeOpacity={0.85}>
+              <TouchableOpacity style={styles.tile} onPress={handleConcernsTilePress} activeOpacity={0.85}>
                 <View style={[styles.tileIconBox, { backgroundColor: concernsNeedAttention ? colors.claySoft : colors.sageSoft }]}>
                   <Ionicons name="checkmark-circle-outline" size={20} color={concernsNeedAttention ? colors.clay : colors.sage} />
                 </View>
+                {activeConcerns.length > 0 && (
+                  <Ionicons
+                    name={expandedDetail === 'concerns' ? 'chevron-up' : 'chevron-down'}
+                    size={13} color={colors.inkSoft} style={styles.tileExpandIcon}
+                  />
+                )}
                 <Text style={styles.tileValue}>
                   {activeConcerns.length > 0 ? `${coveredCount}/${activeConcerns.length}` : '—'}
                 </Text>
@@ -299,10 +318,16 @@ export default function HomeScreen() {
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.tile} onPress={() => goToTab('Routine')} activeOpacity={0.85}>
+              <TouchableOpacity style={styles.tile} onPress={handleCautionsTilePress} activeOpacity={0.85}>
                 <View style={[styles.tileIconBox, { backgroundColor: cautions.length > 0 ? colors.claySoft : colors.sageSoft }]}>
                   <Ionicons name="warning-outline" size={20} color={cautions.length > 0 ? colors.clay : colors.inkSoft} />
                 </View>
+                {cautions.length > 0 && (
+                  <Ionicons
+                    name={expandedDetail === 'cautions' ? 'chevron-up' : 'chevron-down'}
+                    size={13} color={colors.inkSoft} style={styles.tileExpandIcon}
+                  />
+                )}
                 <Text style={styles.tileValue}>{cautions.length}</Text>
                 <Text style={styles.tileLabel}>routine caution{cautions.length !== 1 ? 's' : ''}</Text>
               </TouchableOpacity>
@@ -323,6 +348,56 @@ export default function HomeScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
+
+            {expandedDetail === 'concerns' && (
+              <View style={styles.detailCard}>
+                {concernCoverage.map(({ concern, covered, matchedProduct, matchedIngredient }, i) => (
+                  <View
+                    key={concern.id}
+                    style={[styles.detailRow, i < concernCoverage.length - 1 && styles.detailRowBorder]}
+                  >
+                    <Ionicons
+                      name={covered ? 'checkmark-circle' : 'alert-circle-outline'}
+                      size={16}
+                      color={covered ? colors.sage : colors.gold}
+                    />
+                    <View style={styles.detailRowText}>
+                      <Text style={styles.detailRowTitle}>{concern.label}</Text>
+                      <Text style={styles.detailRowDesc}>
+                        {covered
+                          ? `Covered by ${matchedProduct!.name} (${matchedIngredient})`
+                          : `No assigned product has ${concern.keyIngredient} yet`}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {expandedDetail === 'cautions' && (
+              <View style={styles.detailCard}>
+                {cautions.map((c, i) => (
+                  <View
+                    key={`${c.product.id}-${c.type}`}
+                    style={[styles.detailRow, i < cautions.length - 1 && styles.detailRowBorder]}
+                  >
+                    <Ionicons
+                      name="warning-outline"
+                      size={16}
+                      color={c.type === 'comedogenic' ? colors.clay : colors.gold}
+                    />
+                    <View style={styles.detailRowText}>
+                      <Text style={styles.detailRowTitle}>
+                        {STEP_TYPE_LABELS[c.stepType] ?? c.stepType}: {c.product.name}
+                      </Text>
+                      <Text style={styles.detailRowDesc}>
+                        Contains {c.ingredients.join(', ')} — {c.type === 'comedogenic' ? 'pore-clogging' : 'a common irritant'} for {skinType} skin
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
 
             <View style={styles.savingsCard}>
               <View style={styles.savingsIconBox}>
@@ -374,6 +449,7 @@ const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.crea
   tile: { width: '47%', ...cardStyle, gap: 6 },
   tileLocked: { opacity: 0.5 },
   lockBadge: { position: 'absolute', top: 12, right: 12 },
+  tileExpandIcon: { position: 'absolute', top: 14, right: 12 },
   tileIconBox: {
     width: 36, height: 36, borderRadius: 10,
     alignItems: 'center', justifyContent: 'center',
@@ -382,6 +458,13 @@ const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.crea
   tileValueDimmed: { color: colors.inkSoft, opacity: 0.5 },
   tileLabel: { ...typography.body, fontSize: 11, color: colors.inkSoft, fontWeight: '600' },
   lockedHint: { ...typography.body, fontSize: 12, color: colors.inkSoft, textAlign: 'center' },
+
+  detailCard: { ...cardStyle, padding: 0, overflow: 'hidden' },
+  detailRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 14 },
+  detailRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.line },
+  detailRowText: { flex: 1, gap: 2 },
+  detailRowTitle: { ...typography.bodyStrong, color: colors.ink },
+  detailRowDesc: { fontSize: 12, color: colors.inkSoft, lineHeight: 17 },
 
   savingsCard: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
