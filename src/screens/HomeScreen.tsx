@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -15,11 +15,13 @@ import { getAssignments, Assignment } from '../utils/routineAssignments';
 import { checkConcernCoverage, checkSkinTypeCautions } from '../utils/routineFit';
 import { routineMonthlyCost, monthlyCost } from '../utils/routineCost';
 import { checkConflicts } from '../utils/conflictChecker';
-import { colors, typography, fontFamilies, cardStyle } from '../theme';
+import { typography, fontFamilies, useTheme, ColorTokens } from '../theme';
 
 type Nav = NativeStackNavigationProp<AppStackParamList>;
 
 export default function HomeScreen() {
+  const { colors, cardStyle } = useTheme();
+  const styles = useMemo(() => createStyles(colors, cardStyle), [colors, cardStyle]);
   const [loaded, setLoaded] = useState(false);
   const [skinType, setSkinType] = useState<SkinType | null>(null);
   const [concerns, setConcerns] = useState<string[]>([]);
@@ -359,7 +361,7 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
   content: { padding: 20, paddingBottom: 40, gap: 20 },
 

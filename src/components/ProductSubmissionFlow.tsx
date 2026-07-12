@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Modal, View, Text, TouchableOpacity, StyleSheet, SafeAreaView,
   ScrollView, ActivityIndicator, TextInput, Platform, Image,
@@ -10,8 +10,8 @@ import { extractIngredientsFromImage } from '../api/claudeVision';
 import { parseIngredients } from '../utils/parseIngredients';
 import { resizeForUpload } from '../utils/imageResize';
 import { submitProduct, extractProductInfo } from '../api/submissions';
-import { CATEGORY_META, IoniconName } from './ProductCard';
-import { colors, typography, cardStyle } from '../theme';
+import { getCategoryMeta, IoniconName } from './ProductCard';
+import { typography, useTheme, ColorTokens } from '../theme';
 import PressableScale from './PressableScale';
 import { useToast } from '../context/ToastContext';
 
@@ -26,6 +26,9 @@ interface Props {
 }
 
 export default function ProductSubmissionFlow({ visible, onClose, initialBarcode }: Props) {
+  const { colors, cardStyle } = useTheme();
+  const styles = useMemo(() => createStyles(colors, cardStyle), [colors, cardStyle]);
+  const categoryMeta = useMemo(() => getCategoryMeta(colors), [colors]);
   const [step, setStep] = useState<Step>('front');
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
@@ -291,7 +294,7 @@ export default function ProductSubmissionFlow({ visible, onClose, initialBarcode
               <Text style={styles.label}>Category</Text>
               <View style={styles.chipsRow}>
                 {CATEGORIES.map((cat) => {
-                  const meta = CATEGORY_META[cat];
+                  const meta = categoryMeta[cat];
                   const active = category === cat;
                   return (
                     <TouchableOpacity
@@ -370,7 +373,7 @@ export default function ProductSubmissionFlow({ visible, onClose, initialBarcode
 
 const CORNER_SIZE = 240;
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
   center: {
     flex: 1, alignItems: 'center', justifyContent: 'center',

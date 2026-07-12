@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { OnboardingStackParamList } from '../../types/navigation';
 import { IoniconName } from '../../components/ProductCard';
-import { colors, typography, fontFamilies } from '../../theme';
+import { typography, fontFamilies, useTheme, ColorTokens } from '../../theme';
 
 type Nav = NativeStackNavigationProp<OnboardingStackParamList, 'Welcome'>;
 
@@ -18,6 +18,8 @@ const FEATURES: { icon: IoniconName; title: string; body: string }[] = [
 
 export default function OnboardingWelcome() {
   const navigation = useNavigation<Nav>();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -64,7 +66,7 @@ export default function OnboardingWelcome() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
   inner: { flex: 1, paddingHorizontal: 28, justifyContent: 'space-between', paddingTop: 20, paddingBottom: 12 },
 

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView,
 } from 'react-native';
@@ -12,39 +12,60 @@ import { checkConflicts, DetectedConflict } from '../utils/conflictChecker';
 import { AppStackParamList } from '../types/navigation';
 import ProductCard from '../components/ProductCard';
 import { Product } from '../types';
-import { colors, typography, cardStyle } from '../theme';
+import { typography, useTheme, ColorTokens } from '../theme';
 import { conflictWarning } from '../utils/haptics';
 import EmptyState from '../components/EmptyState';
 import { useToast } from '../context/ToastContext';
 
 type Nav = NativeStackNavigationProp<AppStackParamList>;
+type Styles = ReturnType<typeof createStyles>;
 
-const SEVERITY_META: Record<string, { label: string; bg: string; text: string; icon: React.ComponentProps<typeof Ionicons>['name'] }> = {
-  avoid:   { label: 'Avoid Together', bg: colors.claySoft, text: colors.clay, icon: 'close-circle-outline' },
-  caution: { label: 'Use Caution',    bg: colors.goldSoft, text: colors.gold, icon: 'warning-outline' },
-  note:    { label: 'Good to Know',   bg: colors.sageSoft, text: colors.sage, icon: 'information-circle-outline' },
-};
+function getSeverityMeta(colors: ColorTokens): Record<string, { label: string; bg: string; text: string; icon: React.ComponentProps<typeof Ionicons>['name'] }> {
+  return {
+    avoid:   { label: 'Avoid Together', bg: colors.claySoft, text: colors.clay, icon: 'close-circle-outline' },
+    caution: { label: 'Use Caution',    bg: colors.goldSoft, text: colors.gold, icon: 'warning-outline' },
+    note:    { label: 'Good to Know',   bg: colors.sageSoft, text: colors.sage, icon: 'information-circle-outline' },
+  };
+}
 
 function ConflictCard({
   conflict,
   onRemove,
   onFindAlternative,
+  colors,
+  styles,
+  structuralSeverity,
 }: {
   conflict: DetectedConflict;
   onRemove: (product: Product) => void;
   onFindAlternative: (product: Product) => void;
+  colors: ColorTokens;
+  styles: Styles;
+  structuralSeverity: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const meta = SEVERITY_META[conflict.pair.severity];
+  const severityMeta = useMemo(() => getSeverityMeta(colors), [colors]);
+  const meta = severityMeta[conflict.pair.severity];
   const sameProduct = conflict.productA.id === conflict.productB.id;
   const conflictProducts = sameProduct ? [conflict.productA] : [conflict.productA, conflict.productB];
+
+  // Editorial Paper is near-monochrome, so severity can't lean on hue alone:
+  // avoid = filled solid badge, caution = outlined, note = plain soft badge —
+  // three structurally distinct treatments, not just three tints.
+  const badgeStructuralStyle = !structuralSeverity ? null
+    : conflict.pair.severity === 'avoid' ? { backgroundColor: meta.text, borderWidth: 0 }
+    : conflict.pair.severity === 'caution' ? { backgroundColor: colors.paper, borderWidth: 2, borderColor: meta.text }
+    : { backgroundColor: colors.paper, borderWidth: 0 };
+  const badgeStructuralTextColor = !structuralSeverity ? meta.text
+    : conflict.pair.severity === 'avoid' ? colors.surface
+    : meta.text;
 
   return (
     <TouchableOpacity style={styles.conflictCard} onPress={() => setExpanded((v) => !v)} activeOpacity={0.85}>
       <View style={styles.conflictHeader}>
-        <View style={[styles.severityBadge, { backgroundColor: meta.bg }]}>
-          <Ionicons name={meta.icon} size={13} color={meta.text} />
-          <Text style={[styles.severityLabel, { color: meta.text }]}>{meta.label}</Text>
+        <View style={[styles.severityBadge, { backgroundColor: meta.bg }, badgeStructuralStyle]}>
+          <Ionicons name={meta.icon} size={13} color={badgeStructuralTextColor} />
+          <Text style={[styles.severityLabel, { color: badgeStructuralTextColor }]}>{meta.label}</Text>
         </View>
         <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.inkSoft} />
       </View>
@@ -116,12 +137,16 @@ function ShelfItemRow({
   actionLabel,
   actionIcon,
   onAction,
+  colors,
+  styles,
 }: {
   product: Product;
   onPress: () => void;
   actionLabel: string;
   actionIcon: React.ComponentProps<typeof Ionicons>['name'];
   onAction: () => void;
+  colors: ColorTokens;
+  styles: Styles;
 }) {
   return (
     <View style={styles.itemRow}>
@@ -135,6 +160,8 @@ function ShelfItemRow({
 }
 
 export default function ShelfScreen() {
+  const { colors, cardStyle, structuralSeverity } = useTheme();
+  const styles = useMemo(() => createStyles(colors, cardStyle), [colors, cardStyle]);
   const [shelfProducts, setShelfProducts] = useState<Product[]>([]);
   const [statuses, setStatuses] = useState<Record<string, ShelfStatus>>({});
   const navigation = useNavigation<Nav>();
@@ -224,6 +251,8 @@ export default function ShelfScreen() {
                       actionLabel="Move to considering"
                       actionIcon="arrow-undo-outline"
                       onAction={() => handleToggleStatus(product, 'considering')}
+                      colors={colors}
+                      styles={styles}
                     />
                   ))}
                 </View>
@@ -268,6 +297,9 @@ export default function ShelfScreen() {
                         conflict={c}
                         onRemove={handleRemoveFromShelf}
                         onFindAlternative={handleFindAlternative}
+                        colors={colors}
+                        styles={styles}
+                        structuralSeverity={structuralSeverity}
                       />
                     ))}
                   </View>
@@ -289,6 +321,8 @@ export default function ShelfScreen() {
                       actionLabel="Mark as using"
                       actionIcon="checkmark-circle-outline"
                       onAction={() => handleToggleStatus(product, 'using')}
+                      colors={colors}
+                      styles={styles}
                     />
                   ))}
                 </View>
@@ -302,7 +336,7 @@ export default function ShelfScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
   content: { padding: 16, paddingBottom: 40, gap: 16 },
 

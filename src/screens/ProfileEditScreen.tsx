@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SkinType, BudgetPreference, IntensityPreference, Product } from '../types';
@@ -12,7 +12,7 @@ import { getShelfProduct } from '../utils/shelfStorage';
 import { recommendForStep, RecommendationPreferences } from '../utils/routineRecommendations';
 import { IoniconName } from '../components/ProductCard';
 import { ProfileEditScreenProps } from '../types/navigation';
-import { colors, typography, cardStyle } from '../theme';
+import { typography, useTheme, ColorTokens } from '../theme';
 import { useToast } from '../context/ToastContext';
 import PressableScale from '../components/PressableScale';
 import ProfileRegenerationReview, { RegenerationPlanStep, ManualChoice } from '../components/ProfileRegenerationReview';
@@ -38,6 +38,8 @@ const INTENSITY_OPTIONS: { value: IntensityPreference; icon: IoniconName; label:
 ];
 
 export default function ProfileEditScreen({ navigation }: ProfileEditScreenProps) {
+  const { colors, cardStyle } = useTheme();
+  const styles = useMemo(() => createStyles(colors, cardStyle), [colors, cardStyle]);
   const [skinType, setSkinType] = useState<SkinType | null>(null);
   const [concerns, setConcerns] = useState<string[]>([]);
   const [budgetPreference, setBudgetPreference] = useState<BudgetPreference>('balanced');
@@ -305,7 +307,7 @@ export default function ProfileEditScreen({ navigation }: ProfileEditScreenProps
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
   content: { padding: 20, paddingBottom: 8 },
 

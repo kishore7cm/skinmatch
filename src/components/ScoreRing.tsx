@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated, AccessibilityInfo } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
-import { colors, scoreColor } from '../theme';
+import { useTheme } from '../theme';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -17,6 +17,7 @@ const DURATION = 1000;
 // rather than rendering pre-filled — the score is a claim worth watching
 // arrive, not a static number.
 export default function ScoreRing({ score, size = 56 }: Props) {
+  const { colors, scoreColor } = useTheme();
   const progress = useRef(new Animated.Value(0)).current;
   const radius = (size - STROKE_WIDTH) / 2;
   const circumference = 2 * Math.PI * radius;

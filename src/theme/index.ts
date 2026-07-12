@@ -1,3 +1,5 @@
-export { colors, scoreColor, scoreBgColor } from './colors';
+export { THEMES, DEFAULT_THEME } from './colors';
+export type { ColorTokens, Theme, ThemeName } from './colors';
 export { typography, fontFamilies } from './typography';
-export { radii, spacing, borders, cardStyle, manualOverrideCardStyle } from './spacing';
+export { spacing, borders } from './spacing';
+export { ThemeProvider, useTheme } from './ThemeContext';

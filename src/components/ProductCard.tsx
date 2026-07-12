@@ -1,21 +1,23 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Product } from '../types';
-import { colors, typography, cardStyle, scoreColor } from '../theme';
+import { typography, useTheme, ColorTokens } from '../theme';
 import ScoreRing from './ScoreRing';
 
 export type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 // Category is differentiated by icon only, not a per-category hue — one
 // consistent icon-box treatment (sageSoft/sage) across the app.
-export const CATEGORY_META: Record<string, { icon: IoniconName; bg: string; color: string }> = {
-  cleanser:    { icon: 'water-outline', bg: colors.sageSoft, color: colors.sage },
-  toner:       { icon: 'leaf-outline', bg: colors.sageSoft, color: colors.sage },
-  serum:       { icon: 'sparkles', bg: colors.sageSoft, color: colors.sage },
-  moisturizer: { icon: 'cube-outline', bg: colors.sageSoft, color: colors.sage },
-  sunscreen:   { icon: 'sunny-outline', bg: colors.sageSoft, color: colors.sage },
-};
+export function getCategoryMeta(colors: ColorTokens): Record<string, { icon: IoniconName; bg: string; color: string }> {
+  return {
+    cleanser:    { icon: 'water-outline', bg: colors.sageSoft, color: colors.sage },
+    toner:       { icon: 'leaf-outline', bg: colors.sageSoft, color: colors.sage },
+    serum:       { icon: 'sparkles', bg: colors.sageSoft, color: colors.sage },
+    moisturizer: { icon: 'cube-outline', bg: colors.sageSoft, color: colors.sage },
+    sunscreen:   { icon: 'sunny-outline', bg: colors.sageSoft, color: colors.sage },
+  };
+}
 
 interface Props {
   product: Product;
@@ -26,7 +28,10 @@ interface Props {
 }
 
 export default function ProductCard({ product, onPress, score, scoreLabel, subtitle }: Props) {
-  const meta = CATEGORY_META[product.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
+  const { colors, cardStyle, scoreColor } = useTheme();
+  const styles = useMemo(() => createStyles(colors, cardStyle), [colors, cardStyle]);
+  const categoryMeta = useMemo(() => getCategoryMeta(colors), [colors]);
+  const meta = categoryMeta[product.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.75}>
@@ -64,7 +69,7 @@ export default function ProductCard({ product, onPress, score, scoreLabel, subti
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.create({
   card: {
     ...cardStyle,
     flexDirection: 'row',

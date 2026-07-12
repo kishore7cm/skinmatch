@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   Modal, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform,
 } from 'react-native';
@@ -8,7 +8,7 @@ import { Product } from '../types';
 import { getBeautyProductByBarcode } from '../api/openBeautyFacts';
 import { mapOBFProduct } from '../utils/productMapper';
 import { cacheProducts } from '../utils/productCache';
-import { colors, typography } from '../theme';
+import { useTheme, ColorTokens } from '../theme';
 
 interface Props {
   visible: boolean;
@@ -18,6 +18,8 @@ interface Props {
 }
 
 export default function BarcodeScanner({ visible, onClose, onProductFound, onSubmitProduct }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [permission, requestPermission] = useCameraPermissions();
   const [status, setStatus] = useState<'scanning' | 'loading' | 'notfound'>('scanning');
   const [scanned, setScanned] = useState(false);
@@ -177,7 +179,7 @@ const OVERLAY_COLOR = 'rgba(0,0,0,0.6)';
 const CORNER_SIZE = 24;
 const CORNER_WIDTH = 3;
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens) => StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   center: {
     flex: 1, alignItems: 'center', justifyContent: 'center',

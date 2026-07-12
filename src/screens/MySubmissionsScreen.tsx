@@ -1,15 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, SafeAreaView, ActivityIndicator } from 'react-native';
 import { getMySubmissions, SubmissionSummary, SubmissionStatus } from '../api/submissions';
-import { colors, typography, cardStyle } from '../theme';
+import { typography, useTheme, ColorTokens } from '../theme';
 
-const SUBMISSION_STATUS_META: Record<SubmissionStatus, { label: string; bg: string; text: string }> = {
-  pending:  { label: 'In review', bg: colors.goldSoft, text: colors.gold },
-  approved: { label: 'Added',     bg: colors.sageSoft, text: colors.sage },
-  rejected: { label: 'Not added', bg: colors.claySoft, text: colors.clay },
-};
+function getStatusMeta(colors: ColorTokens): Record<SubmissionStatus, { label: string; bg: string; text: string }> {
+  return {
+    pending:  { label: 'In review', bg: colors.goldSoft, text: colors.gold },
+    approved: { label: 'Added',     bg: colors.sageSoft, text: colors.sage },
+    rejected: { label: 'Not added', bg: colors.claySoft, text: colors.clay },
+  };
+}
 
 export default function MySubmissionsScreen() {
+  const { colors, cardStyle } = useTheme();
+  const styles = useMemo(() => createStyles(colors, cardStyle), [colors, cardStyle]);
+  const statusMeta = useMemo(() => getStatusMeta(colors), [colors]);
   const [submissions, setSubmissions] = useState<SubmissionSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -32,7 +37,7 @@ export default function MySubmissionsScreen() {
         ) : (
           <View style={styles.list}>
             {submissions.map((s) => {
-              const meta = SUBMISSION_STATUS_META[s.status];
+              const meta = statusMeta[s.status];
               return (
                 <View key={s.id} style={styles.row}>
                   <View style={styles.info}>
@@ -52,7 +57,7 @@ export default function MySubmissionsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
   content: { padding: 20, paddingBottom: 40 },
 

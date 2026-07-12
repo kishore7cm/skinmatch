@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView, Image,
 } from 'react-native';
@@ -20,16 +20,17 @@ import { findDupes, dupeExplanation, matchLabel, LOW_CONFIDENCE_THRESHOLD } from
 import ScoreRing from '../components/ScoreRing';
 import { PER_USE_ML, estimatedUses } from '../data/usageDefaults';
 import { Ionicons } from '@expo/vector-icons';
-import { CATEGORY_META, IoniconName } from '../components/ProductCard';
+import { getCategoryMeta, IoniconName } from '../components/ProductCard';
 import ProductPickerModal from '../components/ProductPickerModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { colors, typography, fontFamilies, cardStyle, scoreColor, borders } from '../theme';
+import { typography, fontFamilies, borders, useTheme, ColorTokens } from '../theme';
 import { useToast } from '../context/ToastContext';
 import PressableScale from '../components/PressableScale';
 
 const BANNER_KEY = 'skinmatch_setup_banner_dismissed';
 
 type Nav = NativeStackNavigationProp<AppStackParamList>;
+type Styles = ReturnType<typeof createStyles>;
 
 const SKIN_TYPES: { type: SkinType; icon: IoniconName; label: string; description: string }[] = [
   { type: 'oily',        icon: 'water',          label: 'Oily',        description: 'Shiny, enlarged pores, breakout-prone' },
@@ -50,6 +51,9 @@ export const STEP_META: Record<string, { icon: IoniconName }> = {
 };
 
 export default function RoutineScreen() {
+  const { colors, cardStyle, scoreColor } = useTheme();
+  const styles = useMemo(() => createStyles(colors, cardStyle), [colors, cardStyle]);
+  const categoryMeta = useMemo(() => getCategoryMeta(colors), [colors]);
   const [skinType, setSkinType] = useState<SkinType | null>(null);
   const [concerns, setConcerns] = useState<string[]>([]);
   const [preferences, setPreferences] = useState<RecommendationPreferences>({});
@@ -236,7 +240,7 @@ export default function RoutineScreen() {
         )}
 
         {/* Routine Cost */}
-        {showCostCard && <RoutineCostCard summary={costSummary!} />}
+        {showCostCard && <RoutineCostCard summary={costSummary!} colors={colors} styles={styles} />}
 
         {/* Setup banner — shown until dismissed or shelf has products */}
         {skinType && !bannerDismissed && shelfProducts.length === 0 && (
@@ -310,7 +314,7 @@ export default function RoutineScreen() {
                 const assignedProduct = assignment ? resolveAssignedProduct(assignment.productId) : undefined;
                 const isManual = assignedProduct && assignment?.source === 'manual';
                 const catMeta = assignedProduct
-                  ? (CATEGORY_META[assignedProduct.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.sageSoft, color: colors.sage })
+                  ? (categoryMeta[assignedProduct.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.sageSoft, color: colors.sage })
                   : null;
 
                 return (
@@ -388,6 +392,10 @@ export default function RoutineScreen() {
                               handleAssign(step.stepType, product, 'manual');
                               setAltStep(null);
                             }}
+                            colors={colors}
+                            styles={styles}
+                            categoryMeta={categoryMeta}
+                            scoreColor={scoreColor}
                           />
                         )}
                       </>
@@ -400,6 +408,9 @@ export default function RoutineScreen() {
                         preferences={preferences}
                         onPick={(product) => handleAssign(step.stepType, product, 'auto')}
                         onBrowseShelf={() => setPickerStep(step.stepType)}
+                        colors={colors}
+                        styles={styles}
+                        categoryMeta={categoryMeta}
                       />
                     )}
                   </View>
@@ -475,7 +486,7 @@ export default function RoutineScreen() {
               Based on your {activeConcerns.length} selected concern{activeConcerns.length !== 1 ? 's' : ''}
             </Text>
             {activeConcerns.map((concern) => (
-              <ConcernCard key={concern.id} concern={concern} />
+              <ConcernCard key={concern.id} concern={concern} colors={colors} styles={styles} />
             ))}
           </View>
         )}
@@ -498,7 +509,9 @@ export default function RoutineScreen() {
   );
 }
 
-function ConcernCard({ concern }: { concern: Concern }) {
+function ConcernCard({
+  concern, colors, styles,
+}: { concern: Concern; colors: ColorTokens; styles: Styles }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <TouchableOpacity
@@ -555,6 +568,9 @@ function RecommendedStep({
   preferences,
   onPick,
   onBrowseShelf,
+  colors,
+  styles,
+  categoryMeta,
 }: {
   stepType: string;
   fallbackSuggestion: string;
@@ -563,6 +579,9 @@ function RecommendedStep({
   preferences: RecommendationPreferences;
   onPick: (product: Product) => void;
   onBrowseShelf: () => void;
+  colors: ColorTokens;
+  styles: Styles;
+  categoryMeta: ReturnType<typeof getCategoryMeta>;
 }) {
   const recs = recommendForStep(stepType, skinType, concerns, preferences, 2);
 
@@ -581,7 +600,7 @@ function RecommendedStep({
   return (
     <View style={{ gap: 8 }}>
       {recs.map(({ product, reason, tags }) => {
-        const meta = CATEGORY_META[product.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
+        const meta = categoryMeta[product.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
         return (
           <PressableScale
             key={product.id}
@@ -620,10 +639,18 @@ function AlternativesPanel({
   source,
   preferences,
   onPick,
+  colors,
+  styles,
+  categoryMeta,
+  scoreColor,
 }: {
   source: Product;
   preferences: RecommendationPreferences;
   onPick: (product: Product) => void;
+  colors: ColorTokens;
+  styles: Styles;
+  categoryMeta: ReturnType<typeof getCategoryMeta>;
+  scoreColor: (score: number) => string;
 }) {
   const medianPrice = categoryMedianPrice(PRODUCTS.filter((p) => p.category === source.category));
 
@@ -653,7 +680,7 @@ function AlternativesPanel({
   return (
     <View style={styles.altPanel}>
       {dupes.map(({ dupe, tags }) => {
-        const meta = CATEGORY_META[dupe.product.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
+        const meta = categoryMeta[dupe.product.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
         const priceLabel = (source.price === 0 || dupe.product.price === 0)
           ? 'No price data'
           : dupe.priceDiff === 0 ? 'Same price' : dupe.priceDiff > 0 ? `$${dupe.priceDiff} more` : `$${Math.abs(dupe.priceDiff)} less`;
@@ -702,7 +729,9 @@ function currencySymbol(currency?: 'USD' | 'INR'): string {
   return currency === 'INR' ? '₹' : '$';
 }
 
-function RoutineCostCard({ summary }: { summary: RoutineCostSummary }) {
+function RoutineCostCard({
+  summary, colors, styles,
+}: { summary: RoutineCostSummary; colors: ColorTokens; styles: Styles }) {
   const [expanded, setExpanded] = useState(false);
   const symbol = currencySymbol(summary.breakdown.find((l) => l.product?.currency)?.product?.currency);
 
@@ -727,6 +756,8 @@ function RoutineCostCard({ summary }: { summary: RoutineCostSummary }) {
               line={line}
               symbol={symbol}
               isLast={i === summary.breakdown.length - 1}
+              colors={colors}
+              styles={styles}
             />
           ))}
         </View>
@@ -735,7 +766,9 @@ function RoutineCostCard({ summary }: { summary: RoutineCostSummary }) {
   );
 }
 
-function CostRow({ line, symbol, isLast }: { line: RoutineCostLine; symbol: string; isLast: boolean }) {
+function CostRow({
+  line, symbol, isLast, colors, styles,
+}: { line: RoutineCostLine; symbol: string; isLast: boolean; colors: ColorTokens; styles: Styles }) {
   const [showInfo, setShowInfo] = useState(false);
   const stepLabel = STEP_TYPE_LABELS[line.stepType] ?? line.stepType;
   const canExplain = !!line.product && line.monthlyCost !== undefined;
@@ -780,7 +813,7 @@ function CostRow({ line, symbol, isLast }: { line: RoutineCostLine; symbol: stri
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
   content: { padding: 20, paddingBottom: 40, gap: 20 },
 

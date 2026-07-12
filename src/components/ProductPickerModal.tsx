@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Modal, View, Text, TouchableOpacity, FlatList, StyleSheet, SafeAreaView,
 } from 'react-native';
@@ -8,8 +8,8 @@ import { PRODUCTS } from '../data/products';
 import { STEP_CATEGORY } from '../data/routines';
 import { getShelf, getShelfProduct } from '../utils/shelfStorage';
 import { getCachedProduct } from '../utils/productCache';
-import { CATEGORY_META, IoniconName } from './ProductCard';
-import { colors, typography, cardStyle } from '../theme';
+import { getCategoryMeta, IoniconName } from './ProductCard';
+import { typography, useTheme, ColorTokens } from '../theme';
 
 interface Props {
   visible: boolean;
@@ -20,6 +20,9 @@ interface Props {
 }
 
 export default function ProductPickerModal({ visible, stepType, stepLabel, onSelect, onClose }: Props) {
+  const { colors, cardStyle } = useTheme();
+  const styles = useMemo(() => createStyles(colors, cardStyle), [colors, cardStyle]);
+  const categoryMeta = useMemo(() => getCategoryMeta(colors), [colors]);
   const [shelfProducts, setShelfProducts] = useState<Product[]>([]);
 
   useEffect(() => {
@@ -80,7 +83,7 @@ export default function ProductPickerModal({ visible, stepType, stepLabel, onSel
             keyExtractor={(p) => p.id}
             contentContainerStyle={styles.list}
             renderItem={({ item }) => {
-              const meta = CATEGORY_META[item.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
+              const meta = categoryMeta[item.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
               const isMatch = item.category === expectedCategory;
               return (
                 <TouchableOpacity
@@ -115,7 +118,7 @@ export default function ProductPickerModal({ visible, stepType, stepLabel, onSel
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
 
   header: {

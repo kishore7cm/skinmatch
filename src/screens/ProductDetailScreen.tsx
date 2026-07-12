@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, Modal, TextInput } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -7,7 +7,7 @@ import { PRODUCTS } from '../data/products';
 import { getCachedProduct } from '../utils/productCache';
 import { findDupes, dupeExplanation, matchLabel, LOW_CONFIDENCE_THRESHOLD } from '../utils/matching';
 import { getIngredientFlag, countFlags } from '../utils/ingredientUtils';
-import { CATEGORY_META, IoniconName } from '../components/ProductCard';
+import { getCategoryMeta, IoniconName } from '../components/ProductCard';
 import ScoreRing from '../components/ScoreRing';
 import EmptyState from '../components/EmptyState';
 import { isOnShelf, toggleShelf } from '../utils/shelfStorage';
@@ -15,7 +15,7 @@ import { getPriceOverride, setPriceOverride as savePriceOverride, PriceOverride 
 import { getApprovedSubmissions } from '../api/submissions';
 import { Product } from '../types';
 import { AppStackParamList, ProductDetailScreenProps } from '../types/navigation';
-import { colors, typography, fontFamilies, cardStyle, scoreColor } from '../theme';
+import { typography, fontFamilies, useTheme, ColorTokens } from '../theme';
 import { useToast } from '../context/ToastContext';
 import PressableScale from '../components/PressableScale';
 
@@ -24,6 +24,9 @@ function formatUpdatedAt(iso: string): string {
 }
 
 export default function ProductDetailScreen({ route, navigation }: ProductDetailScreenProps) {
+  const { colors, cardStyle, scoreColor, structuralSeverity } = useTheme();
+  const styles = useMemo(() => createStyles(colors, cardStyle), [colors, cardStyle]);
+  const categoryMeta = useMemo(() => getCategoryMeta(colors), [colors]);
   const [saved, setSaved] = useState(false);
   const [priceOverride, setPriceOverrideState] = useState<PriceOverride | null>(null);
   const [reportModalOpen, setReportModalOpen] = useState(false);
@@ -93,7 +96,7 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
     );
   }
 
-  const meta = CATEGORY_META[product.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
+  const meta = categoryMeta[product.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
   const { comedogenic, irritant } = countFlags(product.ingredients);
   const topDupes = findDupes(product, [...PRODUCTS, ...approvedProducts]);
 
@@ -188,13 +191,19 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
               </View>
               <View style={styles.flags}>
                 {flag?.isComedogenic && (
-                  <View style={[styles.flag, styles.flagRed]}>
-                    <Text style={styles.flagText}>Pore-clogging</Text>
+                  <View style={[
+                    styles.flag, styles.flagRed,
+                    structuralSeverity && { backgroundColor: colors.clay },
+                  ]}>
+                    <Text style={[styles.flagText, structuralSeverity && { color: colors.surface, fontWeight: '800' }]}>Pore-clogging</Text>
                   </View>
                 )}
                 {flag?.isIrritant && (
-                  <View style={[styles.flag, styles.flagOrange]}>
-                    <Text style={styles.flagText}>Irritant</Text>
+                  <View style={[
+                    styles.flag, styles.flagOrange,
+                    structuralSeverity && { backgroundColor: colors.paper, borderWidth: 1.5, borderColor: colors.gold },
+                  ]}>
+                    <Text style={[styles.flagText, structuralSeverity && { color: colors.gold }]}>Irritant</Text>
                   </View>
                 )}
               </View>
@@ -219,7 +228,7 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
           ) : (
           <View style={styles.dupesCard}>
             {topDupes.map((dupe, i) => {
-              const dupeMeta = CATEGORY_META[dupe.product.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
+              const dupeMeta = categoryMeta[dupe.product.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
               const priceDiff = dupe.priceDiff;
               const priceLabel = (product.price === 0 || dupe.product.price === 0)
                 ? 'No price data'
@@ -264,6 +273,7 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
       currentPrice={product.price}
       onSubmit={handleReportPrice}
       onClose={() => setReportModalOpen(false)}
+      colors={colors}
     />
     </>
   );
@@ -274,12 +284,15 @@ function ReportPriceModal({
   currentPrice,
   onSubmit,
   onClose,
+  colors,
 }: {
   visible: boolean;
   currentPrice: number;
   onSubmit: (price: number) => void;
   onClose: () => void;
+  colors: ColorTokens;
 }) {
+  const modalStyles = useMemo(() => createModalStyles(colors), [colors]);
   const [input, setInput] = useState('');
 
   useEffect(() => {
@@ -327,7 +340,7 @@ function ReportPriceModal({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
   content: { padding: 16, gap: 16, paddingBottom: 40 },
   notFound: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -404,7 +417,7 @@ const styles = StyleSheet.create({
   scoreLabel: { fontSize: 10, fontWeight: '700' },
 });
 
-const modalStyles = StyleSheet.create({
+const createModalStyles = (colors: ColorTokens) => StyleSheet.create({
   backdrop: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
     alignItems: 'center', justifyContent: 'center', padding: 24,

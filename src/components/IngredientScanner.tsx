@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Modal, View, Text, TouchableOpacity, StyleSheet, SafeAreaView,
   ScrollView, ActivityIndicator, Platform,
@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { extractIngredientsFromImage } from '../api/claudeVision';
 import { getIngredientFlag, countFlags } from '../utils/ingredientUtils';
 import { parseIngredients } from '../utils/parseIngredients';
-import { colors, typography, cardStyle } from '../theme';
+import { useTheme, ColorTokens } from '../theme';
 
 type Screen = 'camera' | 'processing' | 'results' | 'error';
 
@@ -18,6 +18,8 @@ interface Props {
 }
 
 export default function IngredientScanner({ visible, onClose }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [screen, setScreen] = useState<Screen>('camera');
   const [permission, requestPermission] = useCameraPermissions();
   const [ingredients, setIngredients] = useState<string[]>([]);
@@ -177,7 +179,7 @@ export default function IngredientScanner({ visible, onClose }: Props) {
               </TouchableOpacity>
             </View>
 
-            <ResultsSummary ingredients={ingredients} />
+            <ResultsSummary ingredients={ingredients} colors={colors} styles={styles} />
 
             <ScrollView contentContainerStyle={styles.resultsList}>
               {ingredients.map((ing, i) => {
@@ -225,7 +227,9 @@ export default function IngredientScanner({ visible, onClose }: Props) {
   );
 }
 
-function ResultsSummary({ ingredients }: { ingredients: string[] }) {
+function ResultsSummary({
+  ingredients, colors, styles,
+}: { ingredients: string[]; colors: ColorTokens; styles: ReturnType<typeof createStyles> }) {
   const { comedogenic, irritant } = countFlags(ingredients);
   const clean = ingredients.length - comedogenic - irritant;
   return (
@@ -254,7 +258,7 @@ const CORNER = 22;
 const CORNER_W = 3;
 const SCAN_H = 200;
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
   center: {
     flex: 1, alignItems: 'center', justifyContent: 'center',

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Product } from '../types';
@@ -6,7 +6,7 @@ import { Assignment } from '../utils/routineAssignments';
 import { StepRecommendation } from '../utils/routineRecommendations';
 import { STEP_TYPE_LABELS } from '../data/routines';
 import { STEP_META } from '../screens/RoutineScreen';
-import { colors, typography, cardStyle, borders } from '../theme';
+import { typography, borders, useTheme, ColorTokens } from '../theme';
 import PressableScale from './PressableScale';
 
 export interface RegenerationPlanStep {
@@ -26,6 +26,8 @@ interface Props {
 }
 
 export default function ProfileRegenerationReview({ visible, plan, onCancel, onConfirm }: Props) {
+  const { colors, cardStyle } = useTheme();
+  const styles = useMemo(() => createStyles(colors, cardStyle), [colors, cardStyle]);
   const [choices, setChoices] = useState<Record<string, ManualChoice>>({});
 
   function setChoice(stepType: string, choice: ManualChoice) {
@@ -134,7 +136,7 @@ export default function ProfileRegenerationReview({ visible, plan, onCancel, onC
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
   header: { padding: 20, paddingBottom: 12, gap: 6 },
   title: { ...typography.screenTitle, fontSize: 20, color: colors.ink },

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -6,13 +6,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { OnboardingStackParamList } from '../../types/navigation';
 import { saveProfile } from '../../utils/profileStorage';
 import { CONCERNS } from '../../data/concerns';
-import { colors, typography, cardStyle } from '../../theme';
+import { typography, useTheme, ColorTokens } from '../../theme';
 
 type Nav = NativeStackNavigationProp<OnboardingStackParamList, 'Concerns'>;
 
 export default function OnboardingConcerns() {
   const [selected, setSelected] = useState<string[]>([]);
   const navigation = useNavigation<Nav>();
+  const { colors, cardStyle } = useTheme();
+  const styles = useMemo(() => createStyles(colors, cardStyle), [colors, cardStyle]);
 
   function toggle(id: string) {
     setSelected((prev) =>
@@ -86,7 +88,7 @@ export default function OnboardingConcerns() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
   content: { padding: 24, paddingBottom: 8 },
 

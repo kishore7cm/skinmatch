@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, typography } from '../theme';
+import { typography, useTheme, ColorTokens } from '../theme';
 import PressableScale from './PressableScale';
 import { IoniconName } from './ProductCard';
 
@@ -13,6 +13,8 @@ interface Props {
 }
 
 export default function EmptyState({ icon, title, description, action }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={styles.container}>
       <Ionicons name={icon} size={44} color={colors.line} />
@@ -27,7 +29,7 @@ export default function EmptyState({ icon, title, description, action }: Props) 
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens) => StyleSheet.create({
   container: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, paddingVertical: 40, gap: 10 },
   title: { ...typography.cardTitle, fontSize: 17, color: colors.ink, textAlign: 'center' },
   desc: { ...typography.body, color: colors.inkSoft, textAlign: 'center', lineHeight: 20 },

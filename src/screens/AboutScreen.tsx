@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, typography, cardStyle } from '../theme';
+import { typography, useTheme, ColorTokens } from '../theme';
 
 const OBF_URL = 'https://world.openbeautyfacts.org';
 
 export default function AboutScreen() {
+  const { colors, cardStyle } = useTheme();
+  const styles = useMemo(() => createStyles(colors, cardStyle), [colors, cardStyle]);
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -49,7 +51,7 @@ export default function AboutScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
   content: { padding: 20, paddingBottom: 40, gap: 14 },
 

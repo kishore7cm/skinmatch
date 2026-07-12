@@ -10,7 +10,7 @@ import BarcodeScanner from '../components/BarcodeScanner';
 import IngredientScanner from '../components/IngredientScanner';
 import { PRODUCTS } from '../data/products';
 import { AppStackParamList } from '../types/navigation';
-import { CATEGORY_META, IoniconName } from '../components/ProductCard';
+import { getCategoryMeta, IoniconName } from '../components/ProductCard';
 import ProductCard from '../components/ProductCard';
 import { countFlags } from '../utils/ingredientUtils';
 import { Product } from '../types';
@@ -18,7 +18,7 @@ import { searchBeautyProducts } from '../api/openBeautyFacts';
 import { mapOBFProducts } from '../utils/productMapper';
 import { cacheProducts } from '../utils/productCache';
 import { getApprovedSubmissions } from '../api/submissions';
-import { colors, typography, cardStyle } from '../theme';
+import { typography, useTheme, ColorTokens } from '../theme';
 import EmptyState from '../components/EmptyState';
 import ProductSubmissionFlow from '../components/ProductSubmissionFlow';
 
@@ -38,6 +38,10 @@ const SORT_CYCLE: SortMode[] = ['default', 'price-asc', 'price-desc', 'most-flag
 const CATEGORIES: Category[] = ['all', 'cleanser', 'toner', 'serum', 'moisturizer', 'sunscreen'];
 
 export default function IngredientsScreen() {
+  const { colors, cardStyle } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const noDataStyles = useMemo(() => createNoDataStyles(colors, cardStyle), [colors, cardStyle]);
+  const categoryMeta = useMemo(() => getCategoryMeta(colors), [colors]);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<Category>('all');
   const [sortMode, setSortMode] = useState<SortMode>('default');
@@ -214,7 +218,7 @@ export default function IngredientsScreen() {
         >
           {CATEGORIES.map((cat) => {
             const isActive = category === cat;
-            const meta = cat !== 'all' ? CATEGORY_META[cat] : null;
+            const meta = cat !== 'all' ? categoryMeta[cat] : null;
             return (
               <TouchableOpacity
                 key={cat}
@@ -267,6 +271,9 @@ export default function IngredientsScreen() {
               product={item}
               onScanBarcode={() => { setNoDataProduct(item); setScannerOpen(true); }}
               onScanIngredients={() => { setNoDataProduct(item); setIngredientScannerOpen(true); }}
+              colors={colors}
+              styles={noDataStyles}
+              categoryMeta={categoryMeta}
             />
           ) : (
             <ProductCard
@@ -302,12 +309,18 @@ function NoDataCard({
   product,
   onScanBarcode,
   onScanIngredients,
+  colors,
+  styles: noDataStyles,
+  categoryMeta,
 }: {
   product: Product;
   onScanBarcode: () => void;
   onScanIngredients: () => void;
+  colors: ColorTokens;
+  styles: ReturnType<typeof createNoDataStyles>;
+  categoryMeta: ReturnType<typeof getCategoryMeta>;
 }) {
-  const meta = CATEGORY_META[product.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
+  const meta = categoryMeta[product.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
   return (
     <View style={noDataStyles.card}>
       <View style={[noDataStyles.iconBox, { backgroundColor: meta.bg }]}>
@@ -332,7 +345,7 @@ function NoDataCard({
   );
 }
 
-const noDataStyles = StyleSheet.create({
+const createNoDataStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.create({
   card: {
     ...cardStyle,
     flexDirection: 'row', gap: 12, alignItems: 'flex-start',
@@ -354,7 +367,7 @@ const noDataStyles = StyleSheet.create({
   scanChipText: { fontSize: 11, fontWeight: '700', color: colors.sage },
 });
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
   topBar: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
   title: { ...typography.screenTitle, color: colors.ink },

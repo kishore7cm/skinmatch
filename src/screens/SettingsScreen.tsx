@@ -1,11 +1,16 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView, Platform, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { resetProfile } from '../utils/profileStorage';
 import { SettingsScreenProps } from '../types/navigation';
-import { colors, typography, cardStyle } from '../theme';
+import { typography, useTheme, THEMES, ColorTokens, ThemeName } from '../theme';
+
+const THEME_LIST = Object.values(THEMES);
 
 export default function SettingsScreen({ navigation }: SettingsScreenProps) {
+  const { colors, cardStyle, themeName, setTheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors, cardStyle), [colors, cardStyle]);
+
   function handleResetPress() {
     Alert.alert(
       'Reset profile?',
@@ -31,6 +36,48 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
       <ScrollView contentContainerStyle={styles.content}>
 
         <Text style={styles.title}>Settings</Text>
+
+        <View>
+          <Text style={styles.sectionLabel}>Theme</Text>
+          <View style={styles.themeRow}>
+            {THEME_LIST.map((t) => {
+              const active = themeName === t.name;
+              return (
+                <TouchableOpacity
+                  key={t.name}
+                  style={[styles.themeCard, active && { borderColor: colors.sage, borderWidth: 2 }]}
+                  onPress={() => setTheme(t.name as ThemeName)}
+                  activeOpacity={0.8}
+                >
+                  <View style={[styles.themeSwatchBg, { backgroundColor: t.colors.paper, borderColor: t.colors.line }]}>
+                    <View
+                      style={[
+                        styles.themeSwatchCard,
+                        {
+                          backgroundColor: t.colors.surface,
+                          borderColor: t.colors.line,
+                          borderWidth: t.cardBorderWidth,
+                          borderRadius: Math.min(t.cardRadius, 8),
+                        },
+                      ]}
+                    >
+                      <View style={[styles.themeDot, { backgroundColor: t.colors.sage }]} />
+                      <View style={[styles.themeDot, { backgroundColor: t.colors.clay }]} />
+                      <View style={[styles.themeDot, { backgroundColor: t.colors.gold }]} />
+                    </View>
+                    {active && (
+                      <View style={[styles.themeCheckmark, { backgroundColor: colors.sage }]}>
+                        <Ionicons name="checkmark" size={11} color={colors.surface} />
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.themeLabel}>{t.label}</Text>
+                  <Text style={styles.themeDesc} numberOfLines={2}>{t.description}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
 
         <View style={styles.group}>
           <TouchableOpacity style={styles.row} onPress={() => navigation.navigate('ProfileEdit')} activeOpacity={0.75}>
@@ -98,11 +145,31 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
   content: { padding: 20, gap: 20 },
 
   title: { ...typography.screenTitle, color: colors.ink },
+
+  sectionLabel: { ...typography.eyebrow, color: colors.inkSoft, marginBottom: 10 },
+  themeRow: { flexDirection: 'row', gap: 10 },
+  themeCard: {
+    flex: 1, ...cardStyle, padding: 10, gap: 6, alignItems: 'center',
+  },
+  themeSwatchBg: {
+    width: '100%', aspectRatio: 1, borderRadius: 10, borderWidth: 1,
+    alignItems: 'center', justifyContent: 'center', position: 'relative',
+  },
+  themeSwatchCard: {
+    flexDirection: 'row', padding: 8, gap: 4, alignItems: 'center', justifyContent: 'center', width: '70%',
+  },
+  themeDot: { width: 10, height: 10, borderRadius: 5 },
+  themeCheckmark: {
+    position: 'absolute', top: 6, right: 6,
+    width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center',
+  },
+  themeLabel: { ...typography.bodyStrong, fontSize: 12, color: colors.ink, textAlign: 'center' },
+  themeDesc: { fontSize: 10, color: colors.inkSoft, textAlign: 'center', lineHeight: 13 },
 
   group: { gap: 10 },
   row: {

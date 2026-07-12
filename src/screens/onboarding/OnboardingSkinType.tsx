@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -7,7 +7,7 @@ import { OnboardingStackParamList } from '../../types/navigation';
 import { SkinType } from '../../types';
 import { saveProfile } from '../../utils/profileStorage';
 import { IoniconName } from '../../components/ProductCard';
-import { colors, typography, cardStyle } from '../../theme';
+import { typography, useTheme, ColorTokens } from '../../theme';
 
 type Nav = NativeStackNavigationProp<OnboardingStackParamList, 'SkinType'>;
 
@@ -22,6 +22,8 @@ const SKIN_TYPES: { type: SkinType; icon: IoniconName; label: string; descriptio
 export default function OnboardingSkinType() {
   const [selected, setSelected] = useState<SkinType | null>(null);
   const navigation = useNavigation<Nav>();
+  const { colors, cardStyle } = useTheme();
+  const styles = useMemo(() => createStyles(colors, cardStyle), [colors, cardStyle]);
 
   async function handleContinue() {
     if (selected) await saveProfile({ skinType: selected });
@@ -81,7 +83,7 @@ export default function OnboardingSkinType() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
   content: { padding: 24, paddingBottom: 8 },
 

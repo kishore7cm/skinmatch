@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { saveProfile } from '../../utils/profileStorage';
 import { BudgetPreference, IntensityPreference } from '../../types';
 import { useOnboardingComplete } from '../../context/OnboardingContext';
 import { IoniconName } from '../../components/ProductCard';
-import { colors, typography, cardStyle } from '../../theme';
+import { typography, useTheme, ColorTokens } from '../../theme';
 
 const BUDGET_OPTIONS: { value: BudgetPreference; icon: IoniconName; label: string }[] = [
   { value: 'budget', icon: 'wallet-outline', label: 'Budget-friendly' },
@@ -24,6 +24,8 @@ export default function OnboardingPreferences() {
   const [intensity, setIntensity] = useState<IntensityPreference>('balanced');
   const [clean, setClean] = useState(false);
   const onComplete = useOnboardingComplete();
+  const { colors, cardStyle } = useTheme();
+  const styles = useMemo(() => createStyles(colors, cardStyle), [colors, cardStyle]);
 
   async function handleFinish() {
     await saveProfile({
@@ -113,7 +115,7 @@ export default function OnboardingPreferences() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
   content: { padding: 24, paddingBottom: 8 },
 

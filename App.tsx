@@ -24,7 +24,7 @@ import OnboardingPreferences from './src/screens/onboarding/OnboardingPreference
 import { getProfile } from './src/utils/profileStorage';
 import { OnboardingContext } from './src/context/OnboardingContext';
 import { AppStackParamList, OnboardingStackParamList } from './src/types/navigation';
-import { colors, typography } from './src/theme';
+import { typography, ThemeProvider, useTheme, ColorTokens } from './src/theme';
 import { ToastProvider } from './src/context/ToastContext';
 
 // ── Stack navigators ──────────────────────────────────────────────────────────
@@ -34,13 +34,15 @@ const RoutineStack     = createNativeStackNavigator<AppStackParamList>();
 const IngredientsStack = createNativeStackNavigator<AppStackParamList>();
 const SettingsStack    = createNativeStackNavigator<AppStackParamList>();
 
-const STACK_OPTIONS = {
-  headerStyle: { backgroundColor: colors.paper },
-  headerTintColor: colors.sage,
-  headerTitleStyle: { color: colors.ink, fontWeight: '700' as const, fontSize: 17 },
-  headerShadowVisible: false,
-  contentStyle: { backgroundColor: colors.paper },
-};
+function getStackOptions(colors: ColorTokens) {
+  return {
+    headerStyle: { backgroundColor: colors.paper },
+    headerTintColor: colors.sage,
+    headerTitleStyle: { color: colors.ink, fontWeight: '700' as const, fontSize: 17 },
+    headerShadowVisible: false,
+    contentStyle: { backgroundColor: colors.paper },
+  };
+}
 
 function OnboardingNavigator({ onComplete }: { onComplete: () => void }) {
   return (
@@ -56,8 +58,9 @@ function OnboardingNavigator({ onComplete }: { onComplete: () => void }) {
 }
 
 function HomeNavigator() {
+  const { colors } = useTheme();
   return (
-    <HomeStack.Navigator screenOptions={STACK_OPTIONS}>
+    <HomeStack.Navigator screenOptions={getStackOptions(colors)}>
       <HomeStack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
       <HomeStack.Screen name="ProductDetail" component={ProductDetailScreen} />
     </HomeStack.Navigator>
@@ -65,8 +68,9 @@ function HomeNavigator() {
 }
 
 function RoutineNavigator() {
+  const { colors } = useTheme();
   return (
-    <RoutineStack.Navigator screenOptions={STACK_OPTIONS}>
+    <RoutineStack.Navigator screenOptions={getStackOptions(colors)}>
       <RoutineStack.Screen name="Home" component={RoutineScreen} options={{ headerShown: false }} />
       <RoutineStack.Screen name="ProductDetail" component={ProductDetailScreen} />
       <RoutineStack.Screen name="ProfileEdit" component={ProfileEditScreen} options={{ title: 'Edit Profile' }} />
@@ -75,8 +79,9 @@ function RoutineNavigator() {
 }
 
 function IngredientsNavigator() {
+  const { colors } = useTheme();
   return (
-    <IngredientsStack.Navigator screenOptions={STACK_OPTIONS}>
+    <IngredientsStack.Navigator screenOptions={getStackOptions(colors)}>
       <IngredientsStack.Screen name="Home" component={IngredientsScreen} options={{ headerShown: false }} />
       <IngredientsStack.Screen name="ProductDetail" component={ProductDetailScreen} />
     </IngredientsStack.Navigator>
@@ -84,8 +89,9 @@ function IngredientsNavigator() {
 }
 
 function SettingsNavigator() {
+  const { colors } = useTheme();
   return (
-    <SettingsStack.Navigator screenOptions={STACK_OPTIONS}>
+    <SettingsStack.Navigator screenOptions={getStackOptions(colors)}>
       <SettingsStack.Screen name="Settings" component={SettingsScreen} options={{ headerShown: false }} />
       <SettingsStack.Screen name="ProfileEdit" component={ProfileEditScreen} options={{ title: 'Edit Profile' }} />
       <SettingsStack.Screen name="About" component={AboutScreen} options={{ title: 'About' }} />
@@ -107,6 +113,8 @@ const TAB_META: Record<string, IoniconName> = {
 };
 
 function MainTabs() {
+  const { colors } = useTheme();
+  const tabStyles = getTabStyles(colors);
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -137,18 +145,29 @@ function MainTabs() {
   );
 }
 
-const tabStyles = StyleSheet.create({
-  tabBar: {
-    backgroundColor: colors.surface, borderTopColor: colors.line,
-    borderTopWidth: 1, height: 68, paddingBottom: 10, paddingTop: 6,
-  },
-  tabLabel: { fontSize: 12, fontWeight: '600' },
-  activeDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.sage, marginTop: 2 },
-});
+function getTabStyles(colors: ColorTokens) {
+  return StyleSheet.create({
+    tabBar: {
+      backgroundColor: colors.surface, borderTopColor: colors.line,
+      borderTopWidth: 1, height: 68, paddingBottom: 10, paddingTop: 6,
+    },
+    tabLabel: { fontSize: 12, fontWeight: '600' },
+    activeDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.sage, marginTop: 2 },
+  });
+}
 
 // ── Root app with onboarding gate ─────────────────────────────────────────────
 export default function App() {
+  return (
+    <ThemeProvider>
+      <AppInner />
+    </ThemeProvider>
+  );
+}
+
+function AppInner() {
   const [isOnboarded, setIsOnboarded] = useState<boolean | null>(null);
+  const { colors } = useTheme();
 
   useEffect(() => {
     getProfile().then((p) => setIsOnboarded(p.onboarded));
@@ -156,10 +175,10 @@ export default function App() {
 
   if (isOnboarded === null) {
     return (
-      <View style={appStyles.splash}>
+      <View style={[appStyles.splash, { backgroundColor: colors.paper }]}>
         <StatusBar style="dark" />
         <Ionicons name="sparkles" size={44} color={colors.sage} />
-        <Text style={appStyles.splashName}>SkinMatch</Text>
+        <Text style={[appStyles.splashName, { color: colors.ink }]}>SkinMatch</Text>
       </View>
     );
   }
@@ -180,8 +199,8 @@ export default function App() {
 
 const appStyles = StyleSheet.create({
   splash: {
-    flex: 1, backgroundColor: colors.paper,
+    flex: 1,
     alignItems: 'center', justifyContent: 'center', gap: 8,
   },
-  splashName: { ...typography.screenTitle, color: colors.ink },
+  splashName: { ...typography.screenTitle },
 });

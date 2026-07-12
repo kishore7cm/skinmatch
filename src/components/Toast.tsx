@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Animated, Text, TouchableOpacity, StyleSheet, AccessibilityInfo } from 'react-native';
-import { colors, typography } from '../theme';
+import { typography, useTheme, ColorTokens } from '../theme';
 
 export interface ToastAction {
   label: string;
@@ -17,6 +17,8 @@ const VISIBLE_MS = 2200;
 const ANIM_MS = 220;
 
 export default function Toast({ message, action, onDismiss }: ToastProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const translateY = useRef(new Animated.Value(40)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -58,7 +60,7 @@ export default function Toast({ message, action, onDismiss }: ToastProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens) => StyleSheet.create({
   container: {
     position: 'absolute', left: 16, right: 16, bottom: 24,
     backgroundColor: colors.ink, borderRadius: 14,
