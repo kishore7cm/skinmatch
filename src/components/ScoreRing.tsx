@@ -8,6 +8,9 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 interface Props {
   score: number; // 0–100
   size?: number;
+  // Appended inside the ring next to the number (e.g. "%") so the ring is
+  // self-explanatory without a tap or a legend — never a bare number.
+  suffix?: string;
 }
 
 const STROKE_WIDTH = 5;
@@ -16,7 +19,7 @@ const DURATION = 1000;
 // Draws in on mount (stroke-dashoffset from empty to the score's fraction)
 // rather than rendering pre-filled — the score is a claim worth watching
 // arrive, not a static number.
-export default function ScoreRing({ score, size = 56 }: Props) {
+export default function ScoreRing({ score, size = 56, suffix }: Props) {
   const { colors, scoreColor } = useTheme();
   const progress = useRef(new Animated.Value(0)).current;
   const radius = (size - STROKE_WIDTH) / 2;
@@ -66,7 +69,7 @@ export default function ScoreRing({ score, size = 56 }: Props) {
         />
       </Svg>
       <View style={styles.center} pointerEvents="none">
-        <Text style={[styles.num, { color: tint }]}>{score}</Text>
+        <Text style={[styles.num, { color: tint }, suffix ? styles.numWithSuffix : null]}>{score}{suffix}</Text>
       </View>
     </View>
   );
@@ -78,4 +81,5 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   num: { fontSize: 15, fontWeight: '800' },
+  numWithSuffix: { fontSize: 13 },
 });
