@@ -1,4 +1,5 @@
 import { countFlags } from './ingredientUtils';
+import { LOW_CONFIDENCE_THRESHOLD } from './matching';
 import { ColorTokens } from '../theme';
 import { IoniconName } from '../components/ProductCard';
 
@@ -44,6 +45,24 @@ export function verdictDescription(comedogenic: number, irritant: number): strin
   if (irritant > 0) parts.push(`${irritant} irritant`);
   const total = comedogenic + irritant;
   return `Contains ${parts.join(' + ')} ingredient${total !== 1 ? 's' : ''}.`;
+}
+
+// Match-quality verdict for alternatives/dupes — shares the Verdict type,
+// labels, and colors with the ingredient-safety verdict above, but maps
+// from the dupe similarity score (0-100, already adjusted for comedogenic
+// penalty + price bonus — see matching.ts) rather than raw flag counts.
+// The bottom boundary is LOW_CONFIDENCE_THRESHOLD itself, not a separate
+// number, so a weak/low-confidence match can never land above "avoid" —
+// the verdict and the low-confidence caveat text can't contradict each
+// other by construction. Tuned against the real catalog's score
+// distribution (458 same-category pairs): <40 → 38% of pairs (avoid),
+// 40-49 → caution, 50-69 → good, 70+ → 13% of pairs (excellent, matching
+// the existing "Great" match-quality cutoff used elsewhere).
+export function computeMatchVerdict(score: number): Verdict {
+  if (score >= 70) return 'excellent';
+  if (score >= 50) return 'good';
+  if (score >= LOW_CONFIDENCE_THRESHOLD) return 'caution';
+  return 'avoid';
 }
 
 // Reuses the exact score-ring color tiers (scoreHigh/Mid/Low) rather than

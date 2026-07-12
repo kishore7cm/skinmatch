@@ -8,7 +8,6 @@ import { getCachedProduct } from '../utils/productCache';
 import { findDupes, dupeExplanation, matchLabel, LOW_CONFIDENCE_THRESHOLD } from '../utils/matching';
 import { getIngredientFlag, countFlags } from '../utils/ingredientUtils';
 import { getCategoryMeta, IoniconName } from '../components/ProductCard';
-import ScoreRing from '../components/ScoreRing';
 import EmptyState from '../components/EmptyState';
 import { isOnShelf, toggleShelf } from '../utils/shelfStorage';
 import { getPriceOverride, setPriceOverride as savePriceOverride, PriceOverride } from '../utils/priceOverrides';
@@ -18,7 +17,7 @@ import { AppStackParamList, ProductDetailScreenProps } from '../types/navigation
 import { typography, fontFamilies, useTheme, ColorTokens } from '../theme';
 import { useToast } from '../context/ToastContext';
 import PressableScale from '../components/PressableScale';
-import { computeVerdict, verdictDescription, verdictColor, verdictBgColor, VERDICT_LABELS, VERDICT_ICONS } from '../utils/verdict';
+import { computeVerdict, computeMatchVerdict, verdictDescription, verdictColor, verdictBgColor, VERDICT_LABELS, VERDICT_ICONS } from '../utils/verdict';
 
 function formatUpdatedAt(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
@@ -33,6 +32,7 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [approvedProducts, setApprovedProducts] = useState<Product[]>([]);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
+  const [expandedDupeId, setExpandedDupeId] = useState<string | null>(null);
   const productId = route.params.productId;
   const baseProduct = PRODUCTS.find((p) => p.id === productId) ?? getCachedProduct(productId);
   const product = baseProduct && priceOverride
@@ -259,35 +259,55 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
                 ? 'No price data'
                 : priceDiff === 0 ? 'Same price' : priceDiff > 0 ? `$${priceDiff} more` : `$${Math.abs(priceDiff)} less`;
               const isLowConfidence = dupe.score < LOW_CONFIDENCE_THRESHOLD;
-              const dupeVerdict = computeVerdict(dupe.product.ingredients);
+              const matchVerdict = computeMatchVerdict(dupe.score);
+              const mColor = verdictColor(matchVerdict, colors);
+              const mBg = verdictBgColor(matchVerdict, colors);
+              const isExpanded = expandedDupeId === dupe.product.id;
+              const isLast = i === topDupes.length - 1;
               return (
-                <TouchableOpacity
-                  key={dupe.product.id}
-                  style={[styles.dupeRow, i < topDupes.length - 1 && styles.dupeBorder]}
-                  onPress={() => innerNav.push('ProductDetail', { productId: dupe.product.id })}
-                  activeOpacity={0.75}
-                >
-                  <View style={[styles.dupeIcon, { backgroundColor: dupeMeta.bg }]}>
-                    <Ionicons name={dupeMeta.icon} size={18} color={dupeMeta.color} />
-                  </View>
-                  <View style={styles.dupeInfo}>
-                    <Text style={styles.dupeName}>{dupe.product.name}</Text>
-                    <Text style={styles.dupeBrand}>{dupe.product.brand} · ${dupe.product.price}</Text>
-                    <View style={[styles.verdictChip, { backgroundColor: verdictBgColor(dupeVerdict, colors) }]}>
-                      <Text style={[styles.verdictChipText, { color: verdictColor(dupeVerdict, colors) }]}>{VERDICT_LABELS[dupeVerdict]}</Text>
+                <View key={dupe.product.id}>
+                  <TouchableOpacity
+                    style={[styles.dupeRow, !isLast && !isExpanded && styles.dupeBorder]}
+                    onPress={() => setExpandedDupeId(isExpanded ? null : dupe.product.id)}
+                    activeOpacity={0.75}
+                  >
+                    <View style={[styles.dupeIcon, { backgroundColor: dupeMeta.bg }]}>
+                      <Ionicons name={dupeMeta.icon} size={18} color={dupeMeta.color} />
                     </View>
-                    <Text style={styles.dupeStat}>{dupeExplanation(dupe)} · {priceLabel}</Text>
-                    {isLowConfidence && (
-                      <Text style={styles.lowConfidenceNote}>
-                        Limited overlap — mainly matches on price or category, not shared actives.
-                      </Text>
-                    )}
-                  </View>
-                  <View style={styles.scoreWrap}>
-                    <ScoreRing score={dupe.score} size={44} />
-                    <Text style={[styles.scoreLabel, { color: scoreColor(dupe.score) }]}>{matchLabel(dupe.score)}</Text>
-                  </View>
-                </TouchableOpacity>
+                    <View style={styles.dupeInfo}>
+                      <Text style={styles.dupeName}>{dupe.product.name}</Text>
+                      <Text style={styles.dupeBrand}>{dupe.product.brand} · ${dupe.product.price}</Text>
+                    </View>
+                    <View style={[styles.matchVerdictChip, { backgroundColor: mBg, borderColor: mColor }]}>
+                      <Text style={[styles.matchVerdictText, { color: mColor }]}>{VERDICT_LABELS[matchVerdict]}</Text>
+                    </View>
+                    <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.inkSoft} />
+                  </TouchableOpacity>
+
+                  {isExpanded && (
+                    <View style={[styles.dupeExpanded, !isLast && styles.dupeBorder]}>
+                      <Text style={styles.dupeStat}>{dupeExplanation(dupe)} · {priceLabel}</Text>
+                      {dupe.comedogenicDelta !== 0 && (
+                        <Text style={styles.dupeStat}>
+                          {dupe.comedogenicDelta > 0
+                            ? `${dupe.comedogenicDelta} more comedogenic ingredient${dupe.comedogenicDelta !== 1 ? 's' : ''} than ${product.name}`
+                            : `${Math.abs(dupe.comedogenicDelta)} fewer comedogenic ingredient${Math.abs(dupe.comedogenicDelta) !== 1 ? 's' : ''} — cleaner than ${product.name}`}
+                        </Text>
+                      )}
+                      {isLowConfidence && (
+                        <Text style={styles.lowConfidenceNote}>
+                          Limited overlap — mainly matches on price or category, not shared actives.
+                        </Text>
+                      )}
+                      <View style={styles.dupeExpandedFooter}>
+                        <Text style={[styles.dupeScoreNum, { color: scoreColor(dupe.score) }]}>{matchLabel(dupe.score)}</Text>
+                        <TouchableOpacity onPress={() => innerNav.push('ProductDetail', { productId: dupe.product.id })}>
+                          <Text style={styles.viewProductLink}>View product →</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+                </View>
               );
             })}
           </View>
@@ -392,12 +412,6 @@ const createStyles = (colors: ColorTokens, cardStyle: { borderRadius: number }) 
   verdictLabel: { ...typography.cardTitle, fontSize: 18 },
   verdictDesc: { fontSize: 12, color: colors.inkSoft, lineHeight: 16 },
 
-  verdictChip: {
-    alignSelf: 'flex-start', borderRadius: 6,
-    paddingHorizontal: 8, paddingVertical: 2, marginTop: 2, marginBottom: 1,
-  },
-  verdictChipText: { fontSize: 10, fontWeight: '700' },
-
   shelfBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     ...cardStyle, padding: 14,
@@ -448,16 +462,30 @@ const createStyles = (colors: ColorTokens, cardStyle: { borderRadius: number }) 
   flagText: { fontSize: 10, fontWeight: '700', color: colors.inkSoft },
 
   dupesCard: { ...cardStyle, padding: 0, overflow: 'hidden' },
-  dupeRow: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
+  dupeRow: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10 },
   dupeBorder: { borderBottomWidth: 1, borderBottomColor: colors.line },
   dupeIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  dupeInfo: { flex: 1, gap: 2 },
+  dupeInfo: { flex: 1, gap: 2, minWidth: 0 },
   dupeName: { ...typography.cardTitle, color: colors.ink },
   dupeBrand: { fontSize: 12, color: colors.inkSoft },
   dupeStat: { fontSize: 11, color: colors.inkSoft, marginTop: 1 },
   lowConfidenceNote: { fontSize: 11, color: colors.gold, marginTop: 3, lineHeight: 15 },
-  scoreWrap: { alignItems: 'center', gap: 2 },
-  scoreLabel: { fontSize: 10, fontWeight: '700' },
+
+  matchVerdictChip: {
+    borderRadius: 6, borderWidth: 1, flexShrink: 0,
+    paddingHorizontal: 8, paddingVertical: 3,
+  },
+  matchVerdictText: { fontSize: 10, fontWeight: '700' },
+
+  dupeExpanded: {
+    paddingHorizontal: 14, paddingBottom: 14, paddingTop: 2, gap: 4,
+    marginLeft: 50,
+  },
+  dupeExpandedFooter: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4,
+  },
+  dupeScoreNum: { fontSize: 11, fontWeight: '700' },
+  viewProductLink: { fontSize: 11, fontWeight: '700', color: colors.sage },
 });
 
 const createModalStyles = (colors: ColorTokens) => StyleSheet.create({
