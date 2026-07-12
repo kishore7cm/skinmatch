@@ -25,6 +25,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { typography, fontFamilies, borders, useTheme, ColorTokens } from '../theme';
 import { useToast } from '../context/ToastContext';
 import PressableScale from '../components/PressableScale';
+import { getStepTiming, TIMING_LABELS } from '../utils/routineTiming';
 
 const BANNER_KEY = 'skinmatch_setup_banner_dismissed';
 
@@ -309,6 +310,7 @@ export default function RoutineScreen() {
                 const catMeta = assignedProduct
                   ? (categoryMeta[assignedProduct.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.sageSoft, color: colors.sage })
                   : null;
+                const timing = getStepTiming(step.stepType, assignedProduct);
 
                 return (
                   <View key={step.order} style={[styles.stepCard, isManual && styles.stepCardManual]}>
@@ -316,6 +318,9 @@ export default function RoutineScreen() {
                     <View style={styles.stepHeader}>
                       <Ionicons name={meta.icon} size={18} color={colors.inkSoft} />
                       <Text style={styles.stepLabel}>{STEP_TYPE_LABELS[step.stepType]}</Text>
+                      <View style={styles.timingTag}>
+                        <Text style={styles.timingTagText}>{TIMING_LABELS[timing]}</Text>
+                      </View>
                       <View style={styles.stepNum}>
                         <Text style={styles.stepNumText}>{i + 1}</Text>
                       </View>
@@ -753,6 +758,8 @@ const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.crea
   stepCardManual: { borderWidth: borders.manualOverride, borderColor: colors.gold },
   stepHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   stepLabel: { ...typography.eyebrow, flex: 1, color: colors.inkSoft },
+  timingTag: { backgroundColor: colors.sageSoft, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  timingTagText: { fontSize: 9, fontWeight: '700', color: colors.sage, textTransform: 'uppercase', letterSpacing: 0.3 },
   stepNum: {
     width: 22, height: 22, borderRadius: 11,
     backgroundColor: colors.sageSoft, alignItems: 'center', justifyContent: 'center',
