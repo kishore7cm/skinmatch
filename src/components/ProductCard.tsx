@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Product } from '../types';
 import { typography, useTheme, ColorTokens } from '../theme';
 import ScoreRing from './ScoreRing';
+import { Verdict, VERDICT_LABELS, verdictColor, verdictBgColor } from '../utils/verdict';
 
 export type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -25,9 +26,10 @@ interface Props {
   score?: number;
   scoreLabel?: string;
   subtitle?: React.ReactNode;
+  verdict?: Verdict;
 }
 
-export default function ProductCard({ product, onPress, score, scoreLabel, subtitle }: Props) {
+export default function ProductCard({ product, onPress, score, scoreLabel, subtitle, verdict }: Props) {
   const { colors, cardStyle, scoreColor } = useTheme();
   const styles = useMemo(() => createStyles(colors, cardStyle), [colors, cardStyle]);
   const categoryMeta = useMemo(() => getCategoryMeta(colors), [colors]);
@@ -50,8 +52,15 @@ export default function ProductCard({ product, onPress, score, scoreLabel, subti
       <View style={styles.info}>
         <Text style={styles.name} numberOfLines={1}>{product.name}</Text>
         <Text style={styles.brand}>{product.brand}</Text>
-        <View style={[styles.categoryChip, { backgroundColor: meta.bg }]}>
-          <Text style={[styles.categoryText, { color: meta.color }]}>{product.category}</Text>
+        <View style={styles.chipsRow}>
+          <View style={[styles.categoryChip, { backgroundColor: meta.bg }]}>
+            <Text style={[styles.categoryText, { color: meta.color }]}>{product.category}</Text>
+          </View>
+          {verdict && (
+            <View style={[styles.categoryChip, { backgroundColor: verdictBgColor(verdict, colors) }]}>
+              <Text style={[styles.categoryText, { color: verdictColor(verdict, colors) }]}>{VERDICT_LABELS[verdict]}</Text>
+            </View>
+          )}
         </View>
         {subtitle ? <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text> : null}
       </View>
@@ -87,12 +96,12 @@ const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.crea
   info: { flex: 1, gap: 3 },
   name: { ...typography.cardTitle, color: colors.ink },
   brand: { fontSize: 12, color: colors.inkSoft },
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 2 },
   categoryChip: {
     alignSelf: 'flex-start',
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 2,
-    marginTop: 2,
   },
   categoryText: { fontSize: 11, fontWeight: '600', textTransform: 'capitalize' },
   subtitle: { fontSize: 11, color: colors.inkSoft, marginTop: 3 },

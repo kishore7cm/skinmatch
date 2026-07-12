@@ -18,6 +18,7 @@ import { AppStackParamList, ProductDetailScreenProps } from '../types/navigation
 import { typography, fontFamilies, useTheme, ColorTokens } from '../theme';
 import { useToast } from '../context/ToastContext';
 import PressableScale from '../components/PressableScale';
+import { computeVerdict, verdictDescription, verdictColor, verdictBgColor, VERDICT_LABELS, VERDICT_ICONS } from '../utils/verdict';
 
 function formatUpdatedAt(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
@@ -31,6 +32,7 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
   const [priceOverride, setPriceOverrideState] = useState<PriceOverride | null>(null);
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [approvedProducts, setApprovedProducts] = useState<Product[]>([]);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
   const productId = route.params.productId;
   const baseProduct = PRODUCTS.find((p) => p.id === productId) ?? getCachedProduct(productId);
   const product = baseProduct && priceOverride
@@ -99,6 +101,9 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
   const meta = categoryMeta[product.category] ?? { icon: 'cube-outline' as IoniconName, bg: colors.line, color: colors.inkSoft };
   const { comedogenic, irritant } = countFlags(product.ingredients);
   const topDupes = findDupes(product, [...PRODUCTS, ...approvedProducts]);
+  const verdict = computeVerdict(product.ingredients);
+  const vColor = verdictColor(verdict, colors);
+  const vBg = verdictBgColor(verdict, colors);
 
   return (
     <>
@@ -126,6 +131,22 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
           </View>
         </View>
       </View>
+
+      {/* Headline verdict — the one thing a fast-scanning user needs first.
+          Tapping it reveals the detailed breakdown below (summary counts +
+          full ingredient list) rather than forcing everyone through it. */}
+      <TouchableOpacity
+        style={[styles.verdictCard, { backgroundColor: vBg, borderColor: vColor }]}
+        onPress={() => setDetailsExpanded((v) => !v)}
+        activeOpacity={0.85}
+      >
+        <Ionicons name={VERDICT_ICONS[verdict]} size={30} color={vColor} />
+        <View style={styles.verdictText}>
+          <Text style={[styles.verdictLabel, { color: vColor }]}>{VERDICT_LABELS[verdict]}</Text>
+          <Text style={styles.verdictDesc}>{verdictDescription(comedogenic, irritant)}</Text>
+        </View>
+        <Ionicons name={detailsExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.inkSoft} />
+      </TouchableOpacity>
 
       {/* Save-to-shelf CTA */}
       <PressableScale
@@ -160,57 +181,61 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
         </TouchableOpacity>
       </View>
 
-      {/* Ingredient summary */}
-      <View style={styles.summaryRow}>
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryNum}>{product.ingredients.length}</Text>
-          <Text style={styles.summaryLabel}>Ingredients</Text>
-        </View>
-        <View style={[styles.summaryCard, comedogenic > 0 && styles.summaryWarn]}>
-          <Text style={[styles.summaryNum, comedogenic > 0 && styles.summaryWarnText]}>{comedogenic}</Text>
-          <Text style={[styles.summaryLabel, comedogenic > 0 && styles.summaryWarnText]}>Comedogenic</Text>
-        </View>
-        <View style={[styles.summaryCard, irritant > 0 && styles.summaryWarnOrange]}>
-          <Text style={[styles.summaryNum, irritant > 0 && styles.summaryOrangeText]}>{irritant}</Text>
-          <Text style={[styles.summaryLabel, irritant > 0 && styles.summaryOrangeText]}>Irritants</Text>
-        </View>
-      </View>
-
-      {/* Ingredient list */}
-      <Text style={styles.sectionLabel}>Full Ingredient List</Text>
-      <View style={styles.ingredientCard}>
-        {product.ingredients.map((ing, i) => {
-          const flag = getIngredientFlag(ing);
-          return (
-            <View key={i} style={[styles.ingredientRow, i < product.ingredients.length - 1 && styles.ingredientBorder]}>
-              <View style={styles.ingLeft}>
-                <Text style={styles.ingName}>{ing}</Text>
-                {flag?.commonInteractions[0] && (
-                  <Text style={styles.ingNote}>{flag.commonInteractions[0]}</Text>
-                )}
-              </View>
-              <View style={styles.flags}>
-                {flag?.isComedogenic && (
-                  <View style={[
-                    styles.flag, styles.flagRed,
-                    structuralSeverity && { backgroundColor: colors.clay },
-                  ]}>
-                    <Text style={[styles.flagText, structuralSeverity && { color: colors.surface, fontWeight: '800' }]}>Pore-clogging</Text>
-                  </View>
-                )}
-                {flag?.isIrritant && (
-                  <View style={[
-                    styles.flag, styles.flagOrange,
-                    structuralSeverity && { backgroundColor: colors.paper, borderWidth: 1.5, borderColor: colors.gold },
-                  ]}>
-                    <Text style={[styles.flagText, structuralSeverity && { color: colors.gold }]}>Irritant</Text>
-                  </View>
-                )}
-              </View>
+      {/* Detailed breakdown — collapsed by default behind the headline
+          verdict above; still fully reachable, just not forced on everyone. */}
+      {detailsExpanded && (
+        <>
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryNum}>{product.ingredients.length}</Text>
+              <Text style={styles.summaryLabel}>Ingredients</Text>
             </View>
-          );
-        })}
-      </View>
+            <View style={[styles.summaryCard, comedogenic > 0 && styles.summaryWarn]}>
+              <Text style={[styles.summaryNum, comedogenic > 0 && styles.summaryWarnText]}>{comedogenic}</Text>
+              <Text style={[styles.summaryLabel, comedogenic > 0 && styles.summaryWarnText]}>Comedogenic</Text>
+            </View>
+            <View style={[styles.summaryCard, irritant > 0 && styles.summaryWarnOrange]}>
+              <Text style={[styles.summaryNum, irritant > 0 && styles.summaryOrangeText]}>{irritant}</Text>
+              <Text style={[styles.summaryLabel, irritant > 0 && styles.summaryOrangeText]}>Irritants</Text>
+            </View>
+          </View>
+
+          <Text style={styles.sectionLabel}>Full Ingredient List</Text>
+          <View style={styles.ingredientCard}>
+            {product.ingredients.map((ing, i) => {
+              const flag = getIngredientFlag(ing);
+              return (
+                <View key={i} style={[styles.ingredientRow, i < product.ingredients.length - 1 && styles.ingredientBorder]}>
+                  <View style={styles.ingLeft}>
+                    <Text style={styles.ingName}>{ing}</Text>
+                    {flag?.commonInteractions[0] && (
+                      <Text style={styles.ingNote}>{flag.commonInteractions[0]}</Text>
+                    )}
+                  </View>
+                  <View style={styles.flags}>
+                    {flag?.isComedogenic && (
+                      <View style={[
+                        styles.flag, styles.flagRed,
+                        structuralSeverity && { backgroundColor: colors.clay },
+                      ]}>
+                        <Text style={[styles.flagText, structuralSeverity && { color: colors.surface, fontWeight: '800' }]}>Pore-clogging</Text>
+                      </View>
+                    )}
+                    {flag?.isIrritant && (
+                      <View style={[
+                        styles.flag, styles.flagOrange,
+                        structuralSeverity && { backgroundColor: colors.paper, borderWidth: 1.5, borderColor: colors.gold },
+                      ]}>
+                        <Text style={[styles.flagText, structuralSeverity && { color: colors.gold }]}>Irritant</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </>
+      )}
 
       {/* Alternatives */}
       {topDupes.length > 0 && (
@@ -234,6 +259,7 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
                 ? 'No price data'
                 : priceDiff === 0 ? 'Same price' : priceDiff > 0 ? `$${priceDiff} more` : `$${Math.abs(priceDiff)} less`;
               const isLowConfidence = dupe.score < LOW_CONFIDENCE_THRESHOLD;
+              const dupeVerdict = computeVerdict(dupe.product.ingredients);
               return (
                 <TouchableOpacity
                   key={dupe.product.id}
@@ -247,6 +273,9 @@ export default function ProductDetailScreen({ route, navigation }: ProductDetail
                   <View style={styles.dupeInfo}>
                     <Text style={styles.dupeName}>{dupe.product.name}</Text>
                     <Text style={styles.dupeBrand}>{dupe.product.brand} · ${dupe.product.price}</Text>
+                    <View style={[styles.verdictChip, { backgroundColor: verdictBgColor(dupeVerdict, colors) }]}>
+                      <Text style={[styles.verdictChipText, { color: verdictColor(dupeVerdict, colors) }]}>{VERDICT_LABELS[dupeVerdict]}</Text>
+                    </View>
                     <Text style={styles.dupeStat}>{dupeExplanation(dupe)} · {priceLabel}</Text>
                     {isLowConfidence && (
                       <Text style={styles.lowConfidenceNote}>
@@ -340,7 +369,7 @@ function ReportPriceModal({
   );
 }
 
-const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.create({
+const createStyles = (colors: ColorTokens, cardStyle: { borderRadius: number }) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.paper },
   content: { padding: 16, gap: 16, paddingBottom: 40 },
   notFound: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -354,6 +383,20 @@ const createStyles = (colors: ColorTokens, cardStyle: object) => StyleSheet.crea
   heroMeta: { flexDirection: 'row', gap: 8, marginTop: 6 },
   chip: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
   chipText: { fontSize: 12, fontWeight: '600', color: colors.inkSoft, textTransform: 'capitalize' },
+
+  verdictCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    borderRadius: cardStyle.borderRadius, borderWidth: 2, padding: 16,
+  },
+  verdictText: { flex: 1, gap: 2 },
+  verdictLabel: { ...typography.cardTitle, fontSize: 18 },
+  verdictDesc: { fontSize: 12, color: colors.inkSoft, lineHeight: 16 },
+
+  verdictChip: {
+    alignSelf: 'flex-start', borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 2, marginTop: 2, marginBottom: 1,
+  },
+  verdictChipText: { fontSize: 10, fontWeight: '700' },
 
   shelfBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 10,

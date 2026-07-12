@@ -13,6 +13,7 @@ import { AppStackParamList } from '../types/navigation';
 import { getCategoryMeta, IoniconName } from '../components/ProductCard';
 import ProductCard from '../components/ProductCard';
 import { countFlags } from '../utils/ingredientUtils';
+import { computeVerdict } from '../utils/verdict';
 import { Product } from '../types';
 import { searchBeautyProducts } from '../api/openBeautyFacts';
 import { mapOBFProducts } from '../utils/productMapper';
@@ -280,6 +281,7 @@ export default function IngredientsScreen() {
               product={item}
               onPress={() => navigation.navigate('ProductDetail', { productId: item.id })}
               subtitle={flagSubtitle(item)}
+              verdict={computeVerdict(item.ingredients)}
             />
           )
         }
